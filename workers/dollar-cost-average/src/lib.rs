@@ -32,8 +32,8 @@ fn say_hello(
     Ok(Json(HelloResponse { message }))
 }
 
-fn log_input(_: Config<()>, utxo: Utxo<()>) -> WorkerResult<Ack> {
-    info!("utxo: {}.{}", hex::encode(utxo.tx_hash), utxo.index);
+fn log_input(_: Config<MyConfig>, utxo: Utxo<()>) -> WorkerResult<Ack> {
+    info!(height = utxo.block_height, "utxo: {}.{}", hex::encode(utxo.tx_hash), utxo.index);
     Ok(Ack)
 }
 
