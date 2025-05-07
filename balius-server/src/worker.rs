@@ -1,8 +1,9 @@
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use balius_runtime::Store;
 use pallas_crypto::key::ed25519::SecretKey;
+use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::Mutex;
@@ -11,22 +12,27 @@ use url::Url;
 
 mod kv;
 
-use crate::{config::AppConfig, error::ApiResult};
+use crate::{
+    config::AppConfig,
+    error::{ApiError, ApiResult},
+};
 
 pub struct WorkerService {
     next_id: usize,
     config: AppConfig,
     client: reqwest::Client,
+    predefined_workers: HashMap<String, Vec<u8>>,
 }
 
 impl WorkerService {
-    pub fn new(config: AppConfig) -> Result<Self> {
+    pub fn new(config: AppConfig, predefined_workers: HashMap<String, Vec<u8>>) -> Result<Self> {
         Ok(Self {
             next_id: 1,
             config,
             client: reqwest::ClientBuilder::new()
                 .timeout(Duration::from_secs(10))
                 .build()?,
+            predefined_workers,
         })
     }
 
@@ -34,7 +40,7 @@ impl WorkerService {
         &mut self,
         spec: &str,
         keys: Vec<(&str, SecretKey)>,
-    ) -> Result<Worker> {
+    ) -> ApiResult<Worker> {
         let parsed: WorkerSpec = serde_json::from_str(spec)?;
 
         let id = self.next_id;
@@ -51,7 +57,7 @@ impl WorkerService {
         url: &Url,
         config: serde_json::Value,
         keys: Vec<(&str, SecretKey)>,
-    ) -> Result<Worker> {
+    ) -> ApiResult<Worker> {
         let store_dir_path = self.config.data_dir.join("stores");
         tokio::fs::create_dir_all(&store_dir_path).await?;
         let store_path = store_dir_path.join(format!("{id}.redb"));
@@ -79,9 +85,21 @@ impl WorkerService {
             .with_http(balius_runtime::http::Http::Reqwest(self.client.clone()))
             .build()?;
 
-        worker
-            .register_worker_from_url(&id.to_string(), url, config)
-            .await?;
+        if url.scheme() == "file" {
+            let Some(wasm) = self.predefined_workers.get(url.path()) else {
+                return Err(ApiError::new(
+                    StatusCode::NOT_FOUND,
+                    format!("Worker {url} not found"),
+                ));
+            };
+            worker
+                .register_worker(&id.to_string(), wasm, config)
+                .await?;
+        } else {
+            worker
+                .register_worker_from_url(&id.to_string(), url, config)
+                .await?;
+        }
 
         let token = CancellationToken::new();
 

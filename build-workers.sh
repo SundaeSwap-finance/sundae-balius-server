@@ -1,0 +1,6 @@
+for worker in $(ls workers); do
+    echo "Compile $worker"
+    cargo run --bin balius-worker-builder -- \
+        --source-dir "workers/$worker" \
+        --target-file "balius-server/workers/$worker.wasm"
+done

@@ -12,6 +12,7 @@ use clap::Parser;
 use config::{AppConfig, Args};
 use dashmap::DashMap;
 use error::{ApiError, ApiResult};
+use include_dir::{Dir, include_dir};
 use pallas_crypto::key::ed25519::SecretKey;
 use serde::{Deserialize, Serialize};
 use tokio::{net::TcpListener, sync::Mutex};
@@ -122,6 +123,18 @@ struct InvokeWorkerRequest {
     params: serde_json::Value,
 }
 
+static PRECOMPILED_WORKERS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/workers");
+
+async fn serve_worker(Path(filename): Path<String>) -> ApiResult<Vec<u8>> {
+    let Some(worker) = PRECOMPILED_WORKERS.get_file(&filename) else {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            format!("worker {filename} not found"),
+        ));
+    };
+    Ok(worker.contents().to_vec())
+}
+
 #[derive(Clone)]
 struct AppState {
     projects: Arc<DashMap<String, ProjectState>>,
@@ -138,10 +151,19 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     info!("Hello, world!");
 
+    let mut predefined_workers = HashMap::new();
+    for file in PRECOMPILED_WORKERS.files() {
+        let path = format!("/workers/{}", file.path().to_string_lossy());
+        predefined_workers.insert(path, file.contents().to_vec());
+    }
+
     let state = AppState {
         projects: Arc::new(DashMap::new()),
         workers: Arc::new(DashMap::new()),
-        worker_service: Arc::new(Mutex::new(WorkerService::new(config.clone())?)),
+        worker_service: Arc::new(Mutex::new(WorkerService::new(
+            config.clone(),
+            predefined_workers,
+        )?)),
     };
 
     let app = Router::new()
@@ -149,6 +171,7 @@ async fn main() -> Result<()> {
         .route("/projects", post(create_project))
         .route("/resources", post(create_resource))
         .route("/worker/{workerId}", post(invoke_worker))
+        .route("/workers/{filename}", get(serve_worker))
         .with_state(state);
 
     let listener = TcpListener::bind(("0.0.0.0", config.port)).await?;

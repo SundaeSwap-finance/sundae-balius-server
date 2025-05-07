@@ -1,0 +1,13 @@
+[package]
+name = "dollar-cost-average"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+balius-sdk = { git = "https://github.com/txpipe/balius.git", rev = "acc544a" }
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+tracing = "0.1"
+
+[lib]
+crate-type = ["cdylib"]

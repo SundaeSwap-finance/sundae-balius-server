@@ -1,3 +1,4 @@
 /target
 config.yaml
-/data
+data
+balius-server/workers

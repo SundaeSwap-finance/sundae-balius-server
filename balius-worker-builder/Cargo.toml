@@ -1,0 +1,10 @@
+[package]
+name = "balius-worker-builder"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+wat = "1"
+wit-component = "0.230"

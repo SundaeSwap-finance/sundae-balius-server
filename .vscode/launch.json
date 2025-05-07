@@ -8,34 +8,71 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'sundae-balius-server'",
+            "name": "Debug executable 'balius-server'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=sundae-balius-server",
-                    "--package=sundae-balius-server"
+                    "--bin=balius-server",
+                    "--package=balius-server"
                 ],
                 "filter": {
-                    "name": "sundae-balius-server",
+                    "name": "balius-server",
                     "kind": "bin"
                 }
             },
-            "args": ["-c", "${workspaceFolder}/config.yaml"],
+            "args": ["-c", "${workspaceFolder}/balius-server/config.yaml"],
             "cwd": "${workspaceFolder}"
         },
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'sundae-balius-server'",
+            "name": "Debug unit tests in executable 'balius-server'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=sundae-balius-server",
-                    "--package=sundae-balius-server"
+                    "--bin=balius-server",
+                    "--package=balius-server"
                 ],
                 "filter": {
-                    "name": "sundae-balius-server",
+                    "name": "balius-server",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'balius-worker-builder'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=balius-worker-builder",
+                    "--package=balius-worker-builder"
+                ],
+                "filter": {
+                    "name": "balius-worker-builder",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'balius-worker-builder'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=balius-worker-builder",
+                    "--package=balius-worker-builder"
+                ],
+                "filter": {
+                    "name": "balius-worker-builder",
                     "kind": "bin"
                 }
             },
