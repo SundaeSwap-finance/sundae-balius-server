@@ -1,0 +1,153 @@
+use std::{sync::Arc, time::Duration};
+
+use anyhow::Result;
+use balius_runtime::Store;
+use pallas_crypto::key::ed25519::SecretKey;
+use serde::Deserialize;
+use serde_json::json;
+use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
+use url::Url;
+
+mod kv;
+
+use crate::{config::AppConfig, error::ApiResult};
+
+pub struct WorkerService {
+    next_id: usize,
+    config: AppConfig,
+    client: reqwest::Client,
+}
+
+impl WorkerService {
+    pub fn new(config: AppConfig) -> Result<Self> {
+        Ok(Self {
+            next_id: 1,
+            config,
+            client: reqwest::ClientBuilder::new()
+                .timeout(Duration::from_secs(10))
+                .build()?,
+        })
+    }
+
+    pub async fn create_worker(
+        &mut self,
+        spec: &str,
+        keys: Vec<(&str, SecretKey)>,
+    ) -> Result<Worker> {
+        let parsed: WorkerSpec = serde_json::from_str(spec)?;
+
+        let id = self.next_id;
+        let worker = self
+            .build_balius_worker(id, &parsed.url, parsed.config, keys)
+            .await?;
+        self.next_id += 1;
+        Ok(worker)
+    }
+
+    async fn build_balius_worker(
+        &mut self,
+        id: usize,
+        url: &Url,
+        config: serde_json::Value,
+        keys: Vec<(&str, SecretKey)>,
+    ) -> Result<Worker> {
+        let store_dir_path = self.config.data_dir.join("stores");
+        tokio::fs::create_dir_all(&store_dir_path).await?;
+        let store_path = store_dir_path.join(format!("{id}.redb"));
+        let store = Store::open(store_path, None)?;
+
+        let ledger =
+            balius_runtime::ledgers::u5c::Ledger::new(balius_runtime::ledgers::u5c::Config {
+                endpoint_url: self.config.utxorpc.endpoint_url.clone(),
+                headers: self.config.utxorpc.headers.clone(),
+            })
+            .await?;
+
+        let kv = kv::InMemory::new();
+
+        let mut signer = balius_runtime::sign::in_memory::Signer::new();
+        for (name, key) in keys {
+            signer.add_key(name, key);
+        }
+
+        let worker = balius_runtime::RuntimeBuilder::new(store)
+            .with_ledger(balius_runtime::ledgers::Ledger::U5C(ledger))
+            .with_kv(balius_runtime::kv::Kv::Custom(Arc::new(Mutex::new(kv))))
+            .with_logger(balius_runtime::logging::Logger::Tracing)
+            .with_signer(balius_runtime::sign::Signer::InMemory(signer))
+            .with_http(balius_runtime::http::Http::Reqwest(self.client.clone()))
+            .build()?;
+
+        worker
+            .register_worker_from_url(&id.to_string(), url, config)
+            .await?;
+
+        let token = CancellationToken::new();
+
+        let runtime = worker.clone();
+        let cancel = token.child_token();
+        let u5c_config = self.config.utxorpc.clone();
+        tokio::task::spawn(async move {
+            use balius_runtime::drivers::chainsync::{Config, run};
+            let config = Config {
+                endpoint_url: u5c_config.endpoint_url,
+                headers: u5c_config.headers,
+            };
+            run(config, runtime, cancel).await.unwrap();
+        });
+
+        Ok(Worker {
+            id: id.to_string(),
+            runtime: worker,
+            token,
+        })
+    }
+}
+
+pub struct Worker {
+    pub id: String,
+    runtime: balius_runtime::Runtime,
+    token: CancellationToken,
+}
+
+impl Worker {
+    pub async fn invoke(
+        &mut self,
+        method: &str,
+        params: &serde_json::Value,
+    ) -> ApiResult<serde_json::Value> {
+        use balius_runtime::Response;
+        let params = serde_json::to_vec(params)?;
+        let res = self
+            .runtime
+            .handle_request(&self.id, method, params)
+            .await?;
+        Ok(match res {
+            Response::Acknowledge => json!({}),
+            Response::Json(x) => serde_json::from_slice(&x)?,
+            Response::Cbor(x) => json!({ "cbor": hex::encode(x) }),
+            Response::PartialTx(x) => json!({ "tx": hex::encode(x) }),
+        })
+    }
+}
+
+impl Drop for Worker {
+    fn drop(&mut self) {
+        self.token.cancel();
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(unused)]
+pub struct WorkerSpec {
+    network: String,
+    operator_version: String,
+    throughput_tier: String,
+
+    display_name: String,
+    url: Url,
+    config: serde_json::Value,
+    version: String,
+}

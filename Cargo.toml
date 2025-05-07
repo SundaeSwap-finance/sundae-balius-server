@@ -1,0 +1,25 @@
+[package]
+name = "sundae-balius-server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1"
+axum = "0.8"
+balius-runtime = { git = "https://github.com/txpipe/balius.git", rev = "acc544a" }
+clap = { version = "4", features = ["derive"] }
+dashmap = "6"
+figment = { version = "0.10", features = ["yaml"] }
+hex = "0.4"
+object_store = { version = "*", features = ["http"] }
+pallas-crypto = "0.32"
+rand = "0.8"
+reqwest = "0.12"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+url = { version = "2", features = ["serde"] }

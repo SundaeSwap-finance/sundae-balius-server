@@ -1,0 +1,4 @@
+utxorpc:
+    endpoint_url: http://preview.utxorpc-v0.demeter.run
+    headers:
+        dmtr-api-key: this-one-aint-real
