@@ -294,7 +294,7 @@ dependencies = [
 [[package]]
 name = "balius-macros"
 version = "0.3.4"
-source = "git+https://github.com/txpipe/balius.git?rev=acc544a#acc544a346726797e59e5b2ef91040277011e54b"
+source = "git+https://github.com/txpipe/balius.git?rev=4474cbd#4474cbdf2e99f4231a1eb3291b79fd6bb64c5fc7"
 dependencies = [
  "quote",
  "syn",
@@ -303,7 +303,7 @@ dependencies = [
 [[package]]
 name = "balius-runtime"
 version = "0.3.4"
-source = "git+https://github.com/txpipe/balius.git?rev=acc544a#acc544a346726797e59e5b2ef91040277011e54b"
+source = "git+https://github.com/txpipe/balius.git?rev=4474cbd#4474cbdf2e99f4231a1eb3291b79fd6bb64c5fc7"
 dependencies = [
  "async-trait",
  "flate2",
@@ -330,7 +330,7 @@ dependencies = [
 [[package]]
 name = "balius-sdk"
 version = "0.3.4"
-source = "git+https://github.com/txpipe/balius.git?rev=acc544a#acc544a346726797e59e5b2ef91040277011e54b"
+source = "git+https://github.com/txpipe/balius.git?rev=4474cbd#4474cbdf2e99f4231a1eb3291b79fd6bb64c5fc7"
 dependencies = [
  "balius-macros",
  "hex",
@@ -916,7 +916,9 @@ dependencies = [
  "balius-sdk",
  "hex",
  "serde",
+ "serde_json",
  "tracing",
+ "utxorpc-spec 0.16.0",
 ]
 
 [[package]]
@@ -2562,7 +2564,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
  "heck",
- "itertools 0.14.0",
+ "itertools 0.12.1",
  "log",
  "multimap",
  "once_cell",
@@ -2582,7 +2584,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.12.1",
  "proc-macro2",
  "quote",
  "syn",

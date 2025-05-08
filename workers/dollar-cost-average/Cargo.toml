@@ -4,9 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-balius-sdk = { git = "https://github.com/txpipe/balius.git", rev = "acc544a" }
+balius-sdk = { git = "https://github.com/txpipe/balius.git", rev = "4474cbd" }
 hex = "0.4"
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+utxorpc-spec = "0.16"
 tracing = "0.1"
 
 [lib]
