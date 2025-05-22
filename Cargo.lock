@@ -294,7 +294,7 @@ dependencies = [
 [[package]]
 name = "balius-macros"
 version = "0.3.4"
-source = "git+https://github.com/txpipe/balius.git?rev=4474cbd#4474cbdf2e99f4231a1eb3291b79fd6bb64c5fc7"
+source = "git+https://github.com/txpipe/balius.git?rev=207440d#207440d9023fb6aa5f5f4b4ef5d92adf60dc3954"
 dependencies = [
  "quote",
  "syn",
@@ -303,9 +303,10 @@ dependencies = [
 [[package]]
 name = "balius-runtime"
 version = "0.3.4"
-source = "git+https://github.com/txpipe/balius.git?rev=4474cbd#4474cbdf2e99f4231a1eb3291b79fd6bb64c5fc7"
+source = "git+https://github.com/txpipe/balius.git?rev=207440d#207440d9023fb6aa5f5f4b4ef5d92adf60dc3954"
 dependencies = [
  "async-trait",
+ "chrono",
  "flate2",
  "hex",
  "itertools 0.14.0",
@@ -330,7 +331,7 @@ dependencies = [
 [[package]]
 name = "balius-sdk"
 version = "0.3.4"
-source = "git+https://github.com/txpipe/balius.git?rev=4474cbd#4474cbdf2e99f4231a1eb3291b79fd6bb64c5fc7"
+source = "git+https://github.com/txpipe/balius.git?rev=207440d#207440d9023fb6aa5f5f4b4ef5d92adf60dc3954"
 dependencies = [
  "balius-macros",
  "hex",

@@ -1,6 +1,5 @@
 use balius_sdk::{
-    Ack, Config, FnHandler, Json, Params, Utxo, Worker, WorkerResult,
-    wit::balius::app::driver::UtxoPattern,
+    Ack, Config, FnHandler, Json, Params, Tx, Utxo, UtxoMatcher, Worker, WorkerResult,
 };
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -34,24 +33,25 @@ fn say_hello(
     Ok(Json(HelloResponse { message }))
 }
 
-#[derive(Deserialize)]
-struct OrderRequest {
-    height: u64,
-    spent_utxos: Vec<(Vec<u8>, u64)>,
-}
+fn process_tx(config: Config<MyConfig>, tx: Tx) -> WorkerResult<Ack> {
+    let spent_txos = tx
+        .tx
+        .inputs
+        .iter()
+        .map(|txi| (txi.tx_hash.to_vec(), txi.output_index as u64))
+        .collect::<Vec<_>>();
 
-fn handle_orders(config: Config<MyConfig>, req: Params<OrderRequest>) -> WorkerResult<Ack> {
     let mut seen_orders: Vec<SeenOrderDetails> = kv::get("seen_orders")?.unwrap_or_default();
 
     seen_orders.retain(|deets| {
-        req.spent_utxos
+        spent_txos
             .iter()
             .all(|(hash, index)| &deets.tx_hash != hash && &deets.index != index)
     });
     kv::set("seen_orders", &seen_orders)?;
 
     for seen in seen_orders {
-        let height_passed = req.height - seen.height;
+        let height_passed = tx.block_height - seen.height;
         if height_passed > config.interval {
             info!("we should fuckin buy");
         } else {
@@ -135,14 +135,8 @@ fn main() -> Worker {
 
     Worker::new()
         .with_request_handler("say-hello", FnHandler::from(say_hello))
-        .with_request_handler("handle-orders", FnHandler::from(handle_orders))
-        .with_utxo_handler(
-            UtxoPattern {
-                address: None,
-                token: None,
-            },
-            FnHandler::from(process_order),
-        )
+        .with_tx_handler(UtxoMatcher::all(), FnHandler::from(process_tx))
+        .with_utxo_handler(UtxoMatcher::all(), FnHandler::from(process_order))
 }
 
 #[allow(unused)]

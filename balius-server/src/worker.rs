@@ -1,16 +1,14 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::Result;
-use balius_runtime::Store;
+use balius_runtime::{Store, kv::memory::MemoryKv};
 use pallas_crypto::key::ed25519::SecretKey;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::json;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use url::Url;
-
-mod kv;
 
 use crate::{
     config::AppConfig,
@@ -64,13 +62,13 @@ impl WorkerService {
         let store = Store::open(store_path, None)?;
 
         let ledger =
-            balius_runtime::ledgers::u5c::Ledger::new(balius_runtime::ledgers::u5c::Config {
+            balius_runtime::ledgers::u5c::Ledger::new(&balius_runtime::ledgers::u5c::Config {
                 endpoint_url: self.config.utxorpc.endpoint_url.clone(),
                 headers: self.config.utxorpc.headers.clone(),
             })
             .await?;
 
-        let kv = kv::InMemory::new();
+        let kv = Arc::new(RwLock::new(MemoryKv::default()));
 
         let mut signer = balius_runtime::sign::in_memory::Signer::new();
         for (name, key) in keys {
@@ -79,7 +77,7 @@ impl WorkerService {
 
         let worker = balius_runtime::RuntimeBuilder::new(store)
             .with_ledger(balius_runtime::ledgers::Ledger::U5C(ledger))
-            .with_kv(balius_runtime::kv::Kv::Custom(Arc::new(Mutex::new(kv))))
+            .with_kv(balius_runtime::kv::Kv::Memory(kv))
             .with_logger(balius_runtime::logging::Logger::Tracing)
             .with_signer(balius_runtime::sign::Signer::InMemory(signer))
             .with_http(balius_runtime::http::Http::Reqwest(self.client.clone()))
