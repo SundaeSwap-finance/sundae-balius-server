@@ -13,14 +13,16 @@ use config::{AppConfig, Args};
 use dashmap::DashMap;
 use error::{ApiError, ApiResult};
 use include_dir::{Dir, include_dir};
-use pallas_crypto::key::ed25519::SecretKey;
 use serde::{Deserialize, Serialize};
 use tokio::{net::TcpListener, sync::Mutex};
 use tracing::info;
 use worker::{Worker, WorkerService};
 
+use crate::keys::KeyService;
+
 mod config;
 mod error;
+mod keys;
 mod worker;
 
 async fn hello_world() -> Html<&'static str> {
@@ -56,16 +58,16 @@ async fn create_resource(
     State(AppState {
         workers,
         worker_service,
+        key_service,
         ..
     }): State<AppState>,
     Json(req): Json<CreateResourceRequest>,
 ) -> ApiResult<Json<CreateResourceResponse>> {
-    let mut public_keys = HashMap::new();
-
-    let key = SecretKey::new(rand::thread_rng());
-    public_keys.insert("default".to_string(), key.public_key().to_string());
-
-    let keys = vec![("default", key)];
+    let keys = key_service.get_keys(req.project_id).await?;
+    let public_keys = keys
+        .iter()
+        .map(|(name, key)| (name.clone(), key.public_key().to_string()))
+        .collect();
 
     let worker = worker_service
         .lock()
@@ -86,7 +88,6 @@ async fn create_resource(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CreateResourceRequest {
-    #[allow(unused)]
     project_id: String,
     kind: ResourceKind,
     spec: String,
@@ -140,6 +141,7 @@ struct AppState {
     projects: Arc<DashMap<String, ProjectState>>,
     workers: Arc<DashMap<String, Worker>>,
     worker_service: Arc<Mutex<WorkerService>>,
+    key_service: KeyService,
 }
 
 struct ProjectState {}
@@ -164,6 +166,7 @@ async fn main() -> Result<()> {
             config.clone(),
             predefined_workers,
         )?)),
+        key_service: KeyService::new(config.data_dir.join("keys")),
     };
 
     let app = Router::new()

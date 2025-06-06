@@ -37,7 +37,7 @@ impl WorkerService {
     pub async fn create_worker(
         &mut self,
         spec: &str,
-        keys: Vec<(&str, SecretKey)>,
+        keys: Vec<(String, SecretKey)>,
     ) -> ApiResult<Worker> {
         let parsed: WorkerSpec = serde_json::from_str(spec)?;
 
@@ -54,7 +54,7 @@ impl WorkerService {
         id: usize,
         url: &Url,
         config: serde_json::Value,
-        keys: Vec<(&str, SecretKey)>,
+        keys: Vec<(String, SecretKey)>,
     ) -> ApiResult<Worker> {
         let store_dir_path = self.config.data_dir.join("stores");
         tokio::fs::create_dir_all(&store_dir_path).await?;
@@ -72,7 +72,7 @@ impl WorkerService {
 
         let mut signer = balius_runtime::sign::in_memory::Signer::new();
         for (name, key) in keys {
-            signer.add_key(name, key);
+            signer.add_key(&name, key);
         }
 
         let worker = balius_runtime::RuntimeBuilder::new(store)
