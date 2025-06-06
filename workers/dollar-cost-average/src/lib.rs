@@ -47,7 +47,7 @@ fn process_tx(config: Config<MyConfig>, tx: Tx) -> WorkerResult<Ack> {
     kv::set("seen_orders", &seen_orders)?;
 
     for seen in seen_orders {
-        let slot_passed = tx.block_height - seen.slot;
+        let slot_passed = tx.block_slot - seen.slot;
         if slot_passed > config.interval {
             info!("trying to make a buy");
             buy_buy_buy(&config, &seen)?;
@@ -140,7 +140,7 @@ struct SubmitSSE {
 
 fn process_order(_: Config<MyConfig>, utxo: Utxo<()>) -> WorkerResult<Ack> {
     info!(
-        height = utxo.block_height,
+        slot = utxo.block_slot,
         "utxo: {}.{}",
         hex::encode(&utxo.tx_hash),
         utxo.index
