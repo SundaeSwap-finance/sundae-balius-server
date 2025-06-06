@@ -294,7 +294,7 @@ dependencies = [
 [[package]]
 name = "balius-macros"
 version = "0.3.4"
-source = "git+https://github.com/txpipe/balius.git?rev=207440d#207440d9023fb6aa5f5f4b4ef5d92adf60dc3954"
+source = "git+https://github.com/txpipe/balius.git?rev=43d124d#43d124d39860a99c2b60c0a2f9447ad37984a28a"
 dependencies = [
  "quote",
  "syn",
@@ -303,7 +303,7 @@ dependencies = [
 [[package]]
 name = "balius-runtime"
 version = "0.3.4"
-source = "git+https://github.com/txpipe/balius.git?rev=207440d#207440d9023fb6aa5f5f4b4ef5d92adf60dc3954"
+source = "git+https://github.com/txpipe/balius.git?rev=43d124d#43d124d39860a99c2b60c0a2f9447ad37984a28a"
 dependencies = [
  "async-trait",
  "chrono",
@@ -311,6 +311,7 @@ dependencies = [
  "hex",
  "itertools 0.14.0",
  "object_store",
+ "opentelemetry",
  "pallas",
  "prost",
  "redb",
@@ -331,7 +332,7 @@ dependencies = [
 [[package]]
 name = "balius-sdk"
 version = "0.3.4"
-source = "git+https://github.com/txpipe/balius.git?rev=207440d#207440d9023fb6aa5f5f4b4ef5d92adf60dc3954"
+source = "git+https://github.com/txpipe/balius.git?rev=43d124d#43d124d39860a99c2b60c0a2f9447ad37984a28a"
 dependencies = [
  "balius-macros",
  "hex",
@@ -916,9 +917,11 @@ version = "0.1.0"
 dependencies = [
  "balius-sdk",
  "hex",
+ "plutus-parser",
  "serde",
  "serde_json",
  "tracing",
+ "url",
  "utxorpc-spec 0.16.0",
 ]
 
@@ -2184,6 +2187,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "opentelemetry"
+version = "0.29.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e87237e2775f74896f9ad219d26a2081751187eb7c9f5c58dde20a23b95d16c"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "js-sys",
+ "pin-project-lite",
+ "thiserror 2.0.12",
+ "tracing",
+]
+
+[[package]]
 name = "overload"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2501,6 +2518,27 @@ name = "pkg-config"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
+
+[[package]]
+name = "plutus-parser"
+version = "0.1.0"
+source = "git+https://github.com/SundaeSwap-finance/plutus-parser.git?rev=91a7f44#91a7f44972f6ac9f0e4acdc4e5cb11a2bda88b4b"
+dependencies = [
+ "indexmap 2.9.0",
+ "pallas-primitives",
+ "plutus-parser-derive",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "plutus-parser-derive"
+version = "0.1.0"
+source = "git+https://github.com/SundaeSwap-finance/plutus-parser.git?rev=91a7f44#91a7f44972f6ac9f0e4acdc4e5cb11a2bda88b4b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "postcard"

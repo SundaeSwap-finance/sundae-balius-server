@@ -1,36 +1,31 @@
+mod types;
+mod utils;
+
+use std::time::Duration;
+
 use balius_sdk::{
-    Ack, Config, FnHandler, Json, Params, Tx, Utxo, UtxoMatcher, Worker, WorkerResult,
+    Ack, Config, Error, FnHandler, Tx, Utxo, UtxoMatcher, Worker, WorkerResult, http::HttpRequest,
 };
 use serde::{Deserialize, Serialize};
 use tracing::info;
-use utxorpc_spec::utxorpc::v1alpha::cardano::{Constr, PlutusData, big_int::BigInt, plutus_data};
+
+use crate::{
+    types::{
+        Interval, IntervalBound, Order, OrderDatum, OutputReference, SignedStrategyExecution,
+        StrategyAuthorization, StrategyExecution,
+    },
+    utils::{Network, kv},
+};
 
 #[derive(Deserialize)]
 struct MyConfig {
-    custom_hello: Option<String>,
+    network: Network,
     interval: u64,
-}
-
-#[derive(Deserialize)]
-struct HelloRequest {
-    name: String,
-}
-
-#[derive(Serialize)]
-struct HelloResponse {
-    message: String,
-}
-
-fn say_hello(
-    config: Config<MyConfig>,
-    req: Params<HelloRequest>,
-) -> WorkerResult<Json<HelloResponse>> {
-    let message = format!(
-        "{}, {}",
-        config.custom_hello.as_deref().unwrap_or("Hello"),
-        req.name
-    );
-    Ok(Json(HelloResponse { message }))
+    offer_token: String,
+    offer_amount: u64,
+    receive_token: String,
+    receive_amount_min: u64,
+    valid_for_secs: f64,
 }
 
 fn process_tx(config: Config<MyConfig>, tx: Tx) -> WorkerResult<Ack> {
@@ -51,15 +46,95 @@ fn process_tx(config: Config<MyConfig>, tx: Tx) -> WorkerResult<Ack> {
     kv::set("seen_orders", &seen_orders)?;
 
     for seen in seen_orders {
-        let height_passed = tx.block_height - seen.height;
-        if height_passed > config.interval {
-            info!("we should fuckin buy");
+        let slot_passed = tx.block_height - seen.slot;
+        if slot_passed > config.interval {
+            info!("trying to make a buy");
+            buy_buy_buy(&config, &seen)?;
         } else {
             info!("not yet...");
         }
     }
 
     Ok(Ack)
+}
+
+fn buy_buy_buy(config: &MyConfig, order: &SeenOrderDetails) -> WorkerResult<()> {
+    let Some((offer_policy_id, offer_asset_name)) = parse_token(&config.offer_token) else {
+        return Err(Error::Internal(format!(
+            "Invalid offer token {}",
+            config.offer_token
+        )));
+    };
+    let Some((receive_policy_id, receive_asset_name)) = parse_token(&config.offer_token) else {
+        return Err(Error::Internal(format!(
+            "Invalid receive token {}",
+            config.receive_token
+        )));
+    };
+
+    let now = config.network.to_unix_time(order.slot);
+    let valid_for = Duration::from_secs_f64(config.valid_for_secs);
+    let validity_range = Interval {
+        lower_bound: IntervalBound {
+            bound_type: types::IntervalBoundType::Finite(now),
+            is_inclusive: true,
+        },
+        upper_bound: IntervalBound {
+            bound_type: types::IntervalBoundType::Finite(now + valid_for.as_millis() as u64),
+            is_inclusive: true,
+        },
+    };
+
+    let swap = Order::Swap {
+        offer: (offer_policy_id, offer_asset_name, config.offer_amount),
+        min_received: (
+            receive_policy_id,
+            receive_asset_name,
+            config.receive_amount_min,
+        ),
+    };
+
+    let execution = StrategyExecution {
+        tx_ref: OutputReference {
+            transaction_id: order.tx_hash.clone(),
+            output_index: order.index,
+        },
+        validity_range,
+        details: swap,
+        extensions: vec![],
+    };
+
+    let bytes = types::serialize(execution.clone());
+
+    let signature = balius_sdk::wit::balius::app::sign::sign_payload("default", "ed25519", &bytes)?;
+
+    let sse = SignedStrategyExecution {
+        execution,
+        signature,
+    };
+    let sse_bytes = types::serialize(sse);
+
+    let submit_sse = SubmitSSE {
+        tx_hash: hex::encode(&order.tx_hash),
+        tx_index: order.index,
+        data: hex::encode(sse_bytes),
+    };
+    HttpRequest::post(config.network.relay_url())
+        .json(&submit_sse)?
+        .send()?;
+    Ok(())
+}
+
+fn parse_token(token: &str) -> Option<(Vec<u8>, Vec<u8>)> {
+    let (policy_id, asset_name) = token.split_once(".")?;
+    Some((hex::decode(policy_id).ok()?, hex::decode(asset_name).ok()?))
+}
+
+#[derive(Serialize)]
+struct SubmitSSE {
+    tx_hash: String,
+    tx_index: u64,
+    data: String,
 }
 
 fn process_order(_: Config<MyConfig>, utxo: Utxo<()>) -> WorkerResult<Ack> {
@@ -70,12 +145,15 @@ fn process_order(_: Config<MyConfig>, utxo: Utxo<()>) -> WorkerResult<Ack> {
         utxo.index
     );
 
-    let Some(datum) = utxo.utxo.datum.and_then(|d| parse_order_datum(d.payload?)) else {
+    let Some(datum) = utxo
+        .utxo
+        .datum
+        .and_then(|d| types::try_parse::<OrderDatum>(&d.original_cbor))
+    else {
         return Ok(Ack);
     };
     let key = balius_sdk::wit::balius::app::sign::get_public_key("default", "ed25519")?;
 
-    #[allow(irrefutable_let_patterns)]
     if let Order::Strategy {
         auth: StrategyAuthorization::Signature { signer },
     } = &datum.details
@@ -88,7 +166,7 @@ fn process_order(_: Config<MyConfig>, utxo: Utxo<()>) -> WorkerResult<Ack> {
     }
 
     let seen = SeenOrderDetails {
-        height: utxo.block_height,
+        slot: utxo.block_slot,
         tx_hash: utxo.tx_hash,
         index: utxo.index,
     };
@@ -102,29 +180,9 @@ fn process_order(_: Config<MyConfig>, utxo: Utxo<()>) -> WorkerResult<Ack> {
     Ok(Ack)
 }
 
-mod kv {
-    use balius_sdk::{WorkerResult, wit::balius::app::kv};
-    use serde::{Deserialize, Serialize};
-
-    /// Retrieve a value from the KV store. Returns None if the value does not already exist.
-    pub fn get<D: for<'a> Deserialize<'a>>(key: &str) -> WorkerResult<Option<D>> {
-        match kv::get_value(key) {
-            Ok(bytes) => Ok(Some(serde_json::from_slice(&bytes)?)),
-            Err(kv::KvError::NotFound(_)) => Ok(None),
-            Err(err) => Err(err.into()),
-        }
-    }
-
-    /// Store a value in the KV store.
-    pub fn set<S: Serialize>(key: &str, value: &S) -> WorkerResult<()> {
-        kv::set_value(key, &serde_json::to_vec(value)?)?;
-        Ok(())
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 struct SeenOrderDetails {
-    height: u64,
+    slot: u64,
     tx_hash: Vec<u8>,
     index: u64,
 }
@@ -134,116 +192,6 @@ fn main() -> Worker {
     balius_sdk::logging::init();
 
     Worker::new()
-        .with_request_handler("say-hello", FnHandler::from(say_hello))
         .with_tx_handler(UtxoMatcher::all(), FnHandler::from(process_tx))
         .with_utxo_handler(UtxoMatcher::all(), FnHandler::from(process_order))
-}
-
-#[allow(unused)]
-struct OrderDatum {
-    pool_ident: Option<Vec<u8>>,
-    owner: MultisigScript,
-    max_protocol_fee: BigInt,
-    destination: Destination,
-    details: Order,
-    extra: PlutusData,
-}
-
-#[allow(unused)]
-enum MultisigScript {
-    Signature { key_hash: Vec<u8> },
-}
-
-enum Destination {
-    Self_,
-}
-
-enum Order {
-    Strategy { auth: StrategyAuthorization },
-}
-
-enum StrategyAuthorization {
-    Signature { signer: Vec<u8> },
-}
-
-fn parse_order_datum(data: PlutusData) -> Option<OrderDatum> {
-    let [
-        pool_ident,
-        owner,
-        max_protocol_fee,
-        destination,
-        details,
-        extra,
-    ] = parse_variant(data, 0)?;
-
-    let pool_ident = parse_option(pool_ident).map(|o| o.and_then(parse_bytes))?;
-    let owner = {
-        let [key_hash] = parse_variant(owner, 0)?;
-        MultisigScript::Signature {
-            key_hash: parse_bytes(key_hash)?,
-        }
-    };
-
-    let max_protocol_fee = parse_int(max_protocol_fee)?;
-
-    let destination = {
-        let [] = parse_variant(destination, 1)?;
-        Destination::Self_
-    };
-
-    let details = {
-        let [auth] = parse_variant(details, 0)?;
-        let [signer] = parse_variant(auth, 0)?;
-        Order::Strategy {
-            auth: StrategyAuthorization::Signature {
-                signer: parse_bytes(signer)?,
-            },
-        }
-    };
-
-    Some(OrderDatum {
-        pool_ident,
-        owner,
-        max_protocol_fee,
-        destination,
-        details,
-        extra,
-    })
-}
-
-fn parse_constr(data: PlutusData) -> Option<(u32, Vec<PlutusData>)> {
-    let plutus_data::PlutusData::Constr(Constr { tag, fields, .. }) = data.plutus_data? else {
-        return None;
-    };
-    Some((tag - 121, fields.to_vec()))
-}
-
-fn parse_variant<const N: usize>(data: PlutusData, tag: u32) -> Option<[PlutusData; N]> {
-    let (real_tag, fields) = parse_constr(data)?;
-    if real_tag != tag {
-        return None;
-    }
-    fields.try_into().ok()
-}
-
-fn parse_bytes(data: PlutusData) -> Option<Vec<u8>> {
-    let plutus_data::PlutusData::BoundedBytes(bytes) = data.plutus_data? else {
-        return None;
-    };
-    Some(bytes.to_vec())
-}
-
-fn parse_int(data: PlutusData) -> Option<BigInt> {
-    let plutus_data::PlutusData::BigInt(bigint) = data.plutus_data? else {
-        return None;
-    };
-    bigint.big_int
-}
-
-fn parse_option(data: PlutusData) -> Option<Option<PlutusData>> {
-    match parse_constr(data)? {
-        (0, mut fields) if fields.len() == 1 => Some(fields.pop()),
-        (1, fields) if fields.is_empty() => Some(None),
-        _ => None,
-    }
 }
