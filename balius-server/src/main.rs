@@ -166,7 +166,7 @@ async fn main() -> Result<()> {
             config.clone(),
             predefined_workers,
         )?)),
-        key_service: KeyService::new(config.data_dir.join("keys")),
+        key_service: KeyService::new(config.data_dir.join("keys")).await?,
     };
 
     let app = Router::new()

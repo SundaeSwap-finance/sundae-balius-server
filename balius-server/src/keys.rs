@@ -11,8 +11,9 @@ pub struct KeyService {
 }
 
 impl KeyService {
-    pub fn new(keys_dir: PathBuf) -> Self {
-        Self { keys_dir }
+    pub async fn new(keys_dir: PathBuf) -> Result<Self> {
+        fs::create_dir_all(&keys_dir).await?;
+        Ok(Self { keys_dir })
     }
 
     pub async fn get_keys(&self, project_id: String) -> Result<Vec<(String, SecretKey)>> {

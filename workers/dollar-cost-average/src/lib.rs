@@ -1,10 +1,11 @@
 mod types;
 mod utils;
 
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use balius_sdk::{
-    Ack, Config, Error, FnHandler, Tx, Utxo, UtxoMatcher, Worker, WorkerResult, http::HttpRequest,
+    Ack, Config, Error, FnHandler, Json, Params, Tx, Utxo, UtxoMatcher, Worker, WorkerResult,
+    http::HttpRequest,
 };
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -187,11 +188,27 @@ struct SeenOrderDetails {
     index: u64,
 }
 
+fn get_signer_key(
+    _: Config<MyConfig>,
+    _: Params<HashMap<String, String>>,
+) -> WorkerResult<Json<SignerKey>> {
+    let key = balius_sdk::wit::balius::app::sign::get_public_key("default", "ed25519")?;
+    Ok(Json(SignerKey {
+        signer: hex::encode(key),
+    }))
+}
+
+#[derive(Serialize)]
+struct SignerKey {
+    signer: String,
+}
+
 #[balius_sdk::main]
 fn main() -> Worker {
     balius_sdk::logging::init();
 
     Worker::new()
+        .with_request_handler("get-signer-key", FnHandler::from(get_signer_key))
         .with_tx_handler(UtxoMatcher::all(), FnHandler::from(process_tx))
         .with_utxo_handler(UtxoMatcher::all(), FnHandler::from(process_order))
 }
