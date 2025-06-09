@@ -66,7 +66,7 @@ fn buy_buy_buy(config: &MyConfig, order: &SeenOrderDetails) -> WorkerResult<()> 
             config.offer_token
         )));
     };
-    let Some((receive_policy_id, receive_asset_name)) = parse_token(&config.offer_token) else {
+    let Some((receive_policy_id, receive_asset_name)) = parse_token(&config.receive_token) else {
         return Err(Error::Internal(format!(
             "Invalid receive token {}",
             config.receive_token
