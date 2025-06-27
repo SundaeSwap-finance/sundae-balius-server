@@ -294,7 +294,7 @@ dependencies = [
 [[package]]
 name = "balius-macros"
 version = "0.3.4"
-source = "git+https://github.com/txpipe/balius.git?rev=43d124d#43d124d39860a99c2b60c0a2f9447ad37984a28a"
+source = "git+https://github.com/txpipe/balius.git?rev=35db068#35db068c478a0a3091e3ab6b002bf65ecd4e30a1"
 dependencies = [
  "quote",
  "syn",
@@ -303,7 +303,7 @@ dependencies = [
 [[package]]
 name = "balius-runtime"
 version = "0.3.4"
-source = "git+https://github.com/txpipe/balius.git?rev=43d124d#43d124d39860a99c2b60c0a2f9447ad37984a28a"
+source = "git+https://github.com/txpipe/balius.git?rev=35db068#35db068c478a0a3091e3ab6b002bf65ecd4e30a1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -314,6 +314,7 @@ dependencies = [
  "opentelemetry",
  "pallas",
  "prost",
+ "rand 0.8.5",
  "redb",
  "reqwest",
  "serde",
@@ -332,7 +333,7 @@ dependencies = [
 [[package]]
 name = "balius-sdk"
 version = "0.3.4"
-source = "git+https://github.com/txpipe/balius.git?rev=43d124d#43d124d39860a99c2b60c0a2f9447ad37984a28a"
+source = "git+https://github.com/txpipe/balius.git?rev=35db068#35db068c478a0a3091e3ab6b002bf65ecd4e30a1"
 dependencies = [
  "balius-macros",
  "hex",

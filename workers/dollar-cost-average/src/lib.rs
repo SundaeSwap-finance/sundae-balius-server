@@ -107,7 +107,7 @@ fn buy_buy_buy(config: &MyConfig, order: &SeenOrderDetails) -> WorkerResult<()> 
 
     let bytes = types::serialize(execution.clone());
 
-    let signature = balius_sdk::wit::balius::app::sign::sign_payload("default", "ed25519", &bytes)?;
+    let signature = balius_sdk::wit::balius::app::sign::sign_payload("default", &bytes)?;
 
     let sse = SignedStrategyExecution {
         execution,
@@ -153,7 +153,9 @@ fn process_order(_: Config<MyConfig>, utxo: Utxo<()>) -> WorkerResult<Ack> {
     else {
         return Ok(Ack);
     };
-    let key = balius_sdk::wit::balius::app::sign::get_public_key("default", "ed25519")?;
+    let Some(key) = balius_sdk::get_public_keys().remove("default") else {
+        return Err(Error::Internal("key not found".into()));
+    };
 
     if let Order::Strategy {
         auth: StrategyAuthorization::Signature { signer },
@@ -192,7 +194,9 @@ fn get_signer_key(
     _: Config<MyConfig>,
     _: Params<HashMap<String, String>>,
 ) -> WorkerResult<Json<SignerKey>> {
-    let key = balius_sdk::wit::balius::app::sign::get_public_key("default", "ed25519")?;
+    let Some(key) = balius_sdk::get_public_keys().remove("default") else {
+        return Err(Error::Internal("key not found".into()));
+    };
     Ok(Json(SignerKey {
         signer: hex::encode(key),
     }))
@@ -211,4 +215,5 @@ fn main() -> Worker {
         .with_request_handler("get-signer-key", FnHandler::from(get_signer_key))
         .with_tx_handler(UtxoMatcher::all(), FnHandler::from(process_tx))
         .with_utxo_handler(UtxoMatcher::all(), FnHandler::from(process_order))
+        .with_signer("default", "ed25519")
 }

@@ -58,22 +58,11 @@ async fn create_resource(
     State(AppState {
         workers,
         worker_service,
-        key_service,
         ..
     }): State<AppState>,
     Json(req): Json<CreateResourceRequest>,
 ) -> ApiResult<Json<CreateResourceResponse>> {
-    let keys = key_service.get_keys(req.project_id).await?;
-    let public_keys = keys
-        .iter()
-        .map(|(name, key)| (name.clone(), key.public_key().to_string()))
-        .collect();
-
-    let worker = worker_service
-        .lock()
-        .await
-        .create_worker(&req.spec, keys)
-        .await?;
+    let worker = worker_service.lock().await.create_worker(&req.spec).await?;
     let id = worker.id.clone();
     workers.insert(id.clone(), worker);
 
@@ -81,13 +70,13 @@ async fn create_resource(
         id: id.clone(),
         name: id,
         kind: req.kind,
-        public_keys,
     }))
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CreateResourceRequest {
+    #[allow(unused)]
     project_id: String,
     kind: ResourceKind,
     spec: String,
@@ -103,7 +92,6 @@ struct CreateResourceResponse {
     id: String,
     name: String,
     kind: ResourceKind,
-    public_keys: HashMap<String, String>,
 }
 
 async fn invoke_worker(
@@ -141,7 +129,6 @@ struct AppState {
     projects: Arc<DashMap<String, ProjectState>>,
     workers: Arc<DashMap<String, Worker>>,
     worker_service: Arc<Mutex<WorkerService>>,
-    key_service: KeyService,
 }
 
 struct ProjectState {}
@@ -159,14 +146,16 @@ async fn main() -> Result<()> {
         predefined_workers.insert(path, file.contents().to_vec());
     }
 
+    let key_service = KeyService::new(config.data_dir.join("keys")).await?;
+
     let state = AppState {
         projects: Arc::new(DashMap::new()),
         workers: Arc::new(DashMap::new()),
         worker_service: Arc::new(Mutex::new(WorkerService::new(
             config.clone(),
+            key_service,
             predefined_workers,
         )?)),
-        key_service: KeyService::new(config.data_dir.join("keys")).await?,
     };
 
     let app = Router::new()

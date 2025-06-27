@@ -2,31 +2,37 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use balius_runtime::{Store, kv::memory::MemoryKv};
-use pallas_crypto::key::ed25519::SecretKey;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::json;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use crate::{
     config::AppConfig,
     error::{ApiError, ApiResult},
+    keys::{KeyService, PersistentSignerProvider},
 };
 
 pub struct WorkerService {
     next_id: usize,
     config: AppConfig,
+    keys: KeyService,
     client: reqwest::Client,
     predefined_workers: HashMap<String, Vec<u8>>,
 }
 
 impl WorkerService {
-    pub fn new(config: AppConfig, predefined_workers: HashMap<String, Vec<u8>>) -> Result<Self> {
+    pub fn new(
+        config: AppConfig,
+        keys: KeyService,
+        predefined_workers: HashMap<String, Vec<u8>>,
+    ) -> Result<Self> {
         Ok(Self {
             next_id: 1,
             config,
+            keys,
             client: reqwest::ClientBuilder::new()
                 .timeout(Duration::from_secs(10))
                 .build()?,
@@ -34,16 +40,12 @@ impl WorkerService {
         })
     }
 
-    pub async fn create_worker(
-        &mut self,
-        spec: &str,
-        keys: Vec<(String, SecretKey)>,
-    ) -> ApiResult<Worker> {
+    pub async fn create_worker(&mut self, spec: &str) -> ApiResult<Worker> {
         let parsed: WorkerSpec = serde_json::from_str(spec)?;
 
         let id = self.next_id;
         let worker = self
-            .build_balius_worker(id, &parsed.url, parsed.config, keys)
+            .build_balius_worker(id, &parsed.url, parsed.config)
             .await?;
         self.next_id += 1;
         Ok(worker)
@@ -54,7 +56,6 @@ impl WorkerService {
         id: usize,
         url: &Url,
         config: serde_json::Value,
-        keys: Vec<(String, SecretKey)>,
     ) -> ApiResult<Worker> {
         let store_dir_path = self.config.data_dir.join("stores");
         tokio::fs::create_dir_all(&store_dir_path).await?;
@@ -69,17 +70,15 @@ impl WorkerService {
             .await?;
 
         let kv = Arc::new(RwLock::new(MemoryKv::default()));
-
-        let mut signer = balius_runtime::sign::in_memory::Signer::new();
-        for (name, key) in keys {
-            signer.add_key(&name, key);
-        }
+        let signer = PersistentSignerProvider::new(self.keys.clone());
 
         let worker = balius_runtime::RuntimeBuilder::new(store)
             .with_ledger(balius_runtime::ledgers::Ledger::U5C(ledger))
             .with_kv(balius_runtime::kv::Kv::Memory(kv))
             .with_logger(balius_runtime::logging::Logger::Tracing)
-            .with_signer(balius_runtime::sign::Signer::InMemory(signer))
+            .with_signer(balius_runtime::sign::Signer::Custom(Arc::new(Mutex::new(
+                signer,
+            ))))
             .with_http(balius_runtime::http::Http::Reqwest(self.client.clone()))
             .build()?;
 
