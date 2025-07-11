@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use tokio::{net::TcpListener, sync::Mutex};
 use tracing::info;
 use worker::{Worker, WorkerService};
+use tower_http::cors::{CorsLayer};
 
 use crate::keys::KeyService;
 
@@ -164,6 +165,7 @@ async fn main() -> Result<()> {
         .route("/resources", post(create_resource))
         .route("/worker/{workerId}", post(invoke_worker))
         .route("/workers/{filename}", get(serve_worker))
+        .layer(CorsLayer::permissive())
         .with_state(state);
 
     let listener = TcpListener::bind(("0.0.0.0", config.port)).await?;
