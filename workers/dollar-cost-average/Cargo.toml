@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 balius-sdk = { git = "https://github.com/txpipe/balius.git", rev = "35db068" }
 hex = "0.4"
-plutus-parser = { git = "https://github.com/SundaeSwap-finance/plutus-parser.git", rev = "91a7f44", features = ["derive"] }
+plutus-parser = { git = "https://github.com/SundaeSwap-finance/plutus-parser", rev = "8a77d17", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 url = "2.5"
