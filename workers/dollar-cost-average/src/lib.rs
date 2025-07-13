@@ -15,7 +15,7 @@ use crate::{
         Interval, IntervalBound, Order, OrderDatum, OutputReference, SignedStrategyExecution,
         StrategyAuthorization, StrategyExecution, TransactionId,
     },
-    utils::{kv, Network},
+    utils::{Network, kv},
 };
 
 #[derive(Deserialize)]
@@ -30,6 +30,7 @@ struct MyConfig {
 }
 
 fn process_tx(config: Config<MyConfig>, tx: Tx) -> WorkerResult<Ack> {
+    info!("processing tx {}", hex::encode(tx.hash));
     let spent_txos = tx
         .tx
         .inputs
@@ -37,7 +38,9 @@ fn process_tx(config: Config<MyConfig>, tx: Tx) -> WorkerResult<Ack> {
         .map(|txi| (txi.tx_hash.to_vec(), txi.output_index as u64))
         .collect::<Vec<_>>();
 
+    info!("Looking up seen orders");
     let mut seen_orders: Vec<SeenOrderDetails> = kv::get("seen_orders")?.unwrap_or_default();
+    info!("seen_orders before spending: {:?}", seen_orders);
 
     seen_orders.retain(|deets| {
         spent_txos
@@ -45,6 +48,7 @@ fn process_tx(config: Config<MyConfig>, tx: Tx) -> WorkerResult<Ack> {
             .all(|(hash, index)| !(&deets.tx_hash == hash && &deets.index == index))
     });
     kv::set("seen_orders", &seen_orders)?;
+    info!("retained orders: {:?}", seen_orders);
 
     for seen in seen_orders {
         let slot_passed = tx.block_slot - seen.slot;
@@ -52,7 +56,12 @@ fn process_tx(config: Config<MyConfig>, tx: Tx) -> WorkerResult<Ack> {
             info!("trying to make a buy");
             buy_buy_buy(&config, &seen)?;
         } else {
-            info!("not yet...");
+            info!(
+                "not yet, {} slots passed, out of {} interval; {} slots remaining...",
+                slot_passed,
+                config.interval,
+                config.interval - slot_passed
+            );
         }
     }
 
@@ -73,6 +82,7 @@ fn buy_buy_buy(config: &MyConfig, order: &SeenOrderDetails) -> WorkerResult<()> 
         )));
     };
 
+    info!("ignoring {}", config.valid_for_secs);
     let now = config.network.to_unix_time(order.slot);
     let valid_for = Duration::from_secs_f64(20. * 60.);
     let validity_range = Interval {
@@ -118,8 +128,17 @@ fn buy_buy_buy(config: &MyConfig, order: &SeenOrderDetails) -> WorkerResult<()> 
     let submit_sse = SubmitSSE {
         tx_hash: hex::encode(&order.tx_hash),
         tx_index: order.index,
-        data: hex::encode(sse_bytes),
+        data: hex::encode(&sse_bytes),
     };
+
+    info!(
+        "posting to {}: {} / {} / {}",
+        config.network.relay_url(),
+        hex::encode(&order.tx_hash),
+        order.index,
+        hex::encode(&sse_bytes)
+    );
+
     HttpRequest::post(config.network.relay_url())
         .json(&submit_sse)?
         .send()?;

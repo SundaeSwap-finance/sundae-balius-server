@@ -15,10 +15,10 @@ use error::{ApiError, ApiResult};
 use include_dir::{Dir, include_dir};
 use serde::{Deserialize, Serialize};
 use tokio::{net::TcpListener, sync::Mutex};
-use tracing::info;
-use worker::{Worker, WorkerService};
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
+use tracing::info;
+use worker::{Worker, WorkerService};
 
 use crate::keys::KeyService;
 
