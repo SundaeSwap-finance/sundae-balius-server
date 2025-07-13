@@ -13,9 +13,9 @@ use tracing::info;
 use crate::{
     types::{
         Interval, IntervalBound, Order, OrderDatum, OutputReference, SignedStrategyExecution,
-        StrategyAuthorization, StrategyExecution,
+        StrategyAuthorization, StrategyExecution, TransactionId,
     },
-    utils::{Network, kv},
+    utils::{kv, Network},
 };
 
 #[derive(Deserialize)]
@@ -97,7 +97,7 @@ fn buy_buy_buy(config: &MyConfig, order: &SeenOrderDetails) -> WorkerResult<()> 
 
     let execution = StrategyExecution {
         tx_ref: OutputReference {
-            transaction_id: order.tx_hash.clone(),
+            transaction_id: TransactionId(order.tx_hash.clone()),
             output_index: order.index,
         },
         validity_range,
@@ -111,7 +111,7 @@ fn buy_buy_buy(config: &MyConfig, order: &SeenOrderDetails) -> WorkerResult<()> 
 
     let sse = SignedStrategyExecution {
         execution,
-        signature,
+        signature: Some(signature),
     };
     let sse_bytes = types::serialize(sse);
 

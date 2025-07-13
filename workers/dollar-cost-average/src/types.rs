@@ -14,7 +14,7 @@ pub struct OrderDatum {
 #[derive(AsPlutus)]
 pub struct SignedStrategyExecution {
     pub execution: StrategyExecution,
-    pub signature: Vec<u8>,
+    pub signature: Option<Vec<u8>>,
 }
 
 #[derive(AsPlutus, Clone)]
@@ -55,8 +55,11 @@ pub enum StrategyAuthorization {
 }
 
 #[derive(AsPlutus, Clone)]
+pub struct TransactionId(pub Vec<u8>);
+
+#[derive(AsPlutus, Clone)]
 pub struct OutputReference {
-    pub transaction_id: Vec<u8>,
+    pub transaction_id: TransactionId,
     pub output_index: u64,
 }
 
