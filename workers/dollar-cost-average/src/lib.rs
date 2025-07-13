@@ -74,10 +74,10 @@ fn buy_buy_buy(config: &MyConfig, order: &SeenOrderDetails) -> WorkerResult<()> 
     };
 
     let now = config.network.to_unix_time(order.slot);
-    let valid_for = Duration::from_secs_f64(config.valid_for_secs);
+    let valid_for = Duration::from_secs_f64(20. * 60.);
     let validity_range = Interval {
         lower_bound: IntervalBound {
-            bound_type: types::IntervalBoundType::Finite(now),
+            bound_type: types::IntervalBoundType::Finite(now - valid_for.as_millis() as u64),
             is_inclusive: true,
         },
         upper_bound: IntervalBound {
