@@ -19,8 +19,8 @@ impl Network {
 
     pub fn relay_url(&self) -> Url {
         let url = match self {
-            Self::Preview => "http://sse-relay.preview.sundae.fi",
-            Self::Mainnet => "http://sse-relay.sundae.fi",
+            Self::Preview => "http://sse-relay.preview.sundae.fi/publish",
+            Self::Mainnet => "http://sse-relay.sundae.fi/publish",
         };
         Url::parse(url).unwrap()
     }
