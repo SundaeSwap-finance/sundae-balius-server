@@ -42,7 +42,7 @@ fn process_tx(config: Config<MyConfig>, tx: Tx) -> WorkerResult<Ack> {
     seen_orders.retain(|deets| {
         spent_txos
             .iter()
-            .all(|(hash, index)| &deets.tx_hash != hash && &deets.index != index)
+            .all(|(hash, index)| !(&deets.tx_hash == hash && &deets.index == index))
     });
     kv::set("seen_orders", &seen_orders)?;
 
