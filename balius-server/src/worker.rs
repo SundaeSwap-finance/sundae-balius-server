@@ -109,7 +109,10 @@ impl WorkerService {
                 endpoint_url: u5c_config.endpoint_url,
                 headers: u5c_config.headers,
             };
-            run(config, runtime, cancel).await.unwrap();
+            match run(config, runtime, cancel).await {
+                Ok(_) => println!("Worker done!"),
+                Err(e) => println!("Error! {:#?}", e),
+            }
         });
 
         Ok(Worker {
