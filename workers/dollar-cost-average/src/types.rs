@@ -1,5 +1,8 @@
+use std::fmt::Debug;
+
 use balius_sdk::txbuilder::{codec::minicbor, plutus::BigInt};
 use plutus_parser::AsPlutus;
+use serde::{Deserialize, Serialize};
 
 #[derive(AsPlutus)]
 pub struct OrderDatum {
@@ -23,6 +26,13 @@ pub struct StrategyExecution {
     pub validity_range: Interval,
     pub details: Order,
     pub extensions: Vec<u8>,
+}
+
+#[derive(Serialize)]
+pub struct SubmitSSE {
+    pub tx_hash: String,
+    pub tx_index: u64,
+    pub data: String,
 }
 
 #[derive(AsPlutus)]
@@ -54,19 +64,40 @@ pub enum StrategyAuthorization {
     Signature { signer: Vec<u8> },
 }
 
-#[derive(AsPlutus, Clone)]
+#[derive(AsPlutus, Clone, Serialize, Deserialize, Debug)]
 pub struct TransactionId(pub Vec<u8>);
 
-#[derive(AsPlutus, Clone)]
+#[derive(AsPlutus, Clone, Serialize, Deserialize)]
 pub struct OutputReference {
     pub transaction_id: TransactionId,
     pub output_index: u64,
+}
+
+impl Debug for OutputReference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(format!("{}#{}", hex::encode(&self.transaction_id.0), self.output_index).as_str())
+    }
 }
 
 #[derive(AsPlutus, Clone)]
 pub struct Interval {
     pub lower_bound: IntervalBound,
     pub upper_bound: IntervalBound,
+}
+
+impl Interval {
+    pub fn inclusive_range(lower_millis: u64, upper_millis: u64) -> Self {
+        Self {
+            lower_bound: IntervalBound {
+                bound_type: IntervalBoundType::Finite(lower_millis),
+                is_inclusive: true,
+            },
+            upper_bound: IntervalBound {
+                bound_type: IntervalBoundType::Finite(upper_millis),
+                is_inclusive: true,
+            },
+        }
+    }
 }
 
 #[derive(AsPlutus, Clone)]
@@ -98,7 +129,7 @@ pub fn test_strategy_serialization() {
     let (offer_policy_id, offer_asset_name) = (vec![], vec![]);
     let (receive_policy_id, receive_asset_name) = (
         hex::decode("99b071ce8580d6a3a11b4902145adb8bfd0d2a03935af8cf66403e15").unwrap(),
-        hex::decode("534245525259").unwrap()
+        hex::decode("534245525259").unwrap(),
     );
 
     let validity_range = Interval {
@@ -114,16 +145,15 @@ pub fn test_strategy_serialization() {
 
     let swap = Order::Swap {
         offer: (offer_policy_id, offer_asset_name, 10000000),
-        min_received: (
-            receive_policy_id,
-            receive_asset_name,
-            1,
-        ),
+        min_received: (receive_policy_id, receive_asset_name, 1),
     };
 
     let execution = StrategyExecution {
         tx_ref: OutputReference {
-            transaction_id: TransactionId(hex::decode("da432ef16b7aa9b3972bdd42f86e6605c14444e75678f4e6fd75baa01168086f").unwrap()),
+            transaction_id: TransactionId(
+                hex::decode("da432ef16b7aa9b3972bdd42f86e6605c14444e75678f4e6fd75baa01168086f")
+                    .unwrap(),
+            ),
             output_index: 0,
         },
         validity_range,
