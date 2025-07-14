@@ -4,7 +4,7 @@ use balius_sdk::txbuilder::{codec::minicbor, plutus::BigInt};
 use plutus_parser::AsPlutus;
 use serde::{Deserialize, Serialize};
 
-#[derive(AsPlutus)]
+#[derive(AsPlutus, Serialize, Deserialize, Debug, Clone)]
 pub struct OrderDatum {
     pub pool_ident: Option<Vec<u8>>,
     pub owner: MultisigScript,
@@ -35,18 +35,18 @@ pub struct SubmitSSE {
     pub data: String,
 }
 
-#[derive(AsPlutus)]
+#[derive(AsPlutus, Serialize, Deserialize, Debug, Clone)]
 pub enum MultisigScript {
     Signature { key_hash: Vec<u8> },
 }
 
-#[derive(AsPlutus)]
+#[derive(AsPlutus, Serialize, Deserialize, Debug, Clone)]
 pub enum Destination {
     #[variant = 1]
     Self_,
 }
 
-#[derive(AsPlutus, Clone)]
+#[derive(AsPlutus, Clone, Serialize, Deserialize, Debug)]
 pub enum Order {
     Strategy {
         auth: StrategyAuthorization,
@@ -59,7 +59,7 @@ pub enum Order {
 
 pub type SingletonValue = (Vec<u8>, Vec<u8>, u64);
 
-#[derive(AsPlutus, Clone)]
+#[derive(AsPlutus, Clone, Serialize, Deserialize, Debug)]
 pub enum StrategyAuthorization {
     Signature { signer: Vec<u8> },
 }
@@ -75,7 +75,14 @@ pub struct OutputReference {
 
 impl Debug for OutputReference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(format!("{}#{}", hex::encode(&self.transaction_id.0), self.output_index).as_str())
+        f.write_str(
+            format!(
+                "{}#{}",
+                hex::encode(&self.transaction_id.0),
+                self.output_index
+            )
+            .as_str(),
+        )
     }
 }
 
