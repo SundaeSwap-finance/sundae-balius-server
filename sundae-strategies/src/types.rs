@@ -34,6 +34,18 @@ impl<'de> Deserialize<'de> for AssetId {
 }
 
 #[derive(AsPlutus, Serialize, Deserialize, Debug, Clone)]
+pub struct PoolDatum {
+    pub identifier: Vec<u8>,
+    pub assets: (Vec<u8>, Vec<u8>),
+    pub circulating_lp: BigInt,
+    pub bid_fees_per_10_thousand: BigInt,
+    pub ask_fees_per_10_thousand: BigInt,
+    pub fee_manager: Option<MultisigScript>,
+    pub market_open: BigInt,
+    pub protocol_fees: BigInt,
+}
+
+#[derive(AsPlutus, Serialize, Deserialize, Debug, Clone)]
 pub struct OrderDatum {
     pub pool_ident: Option<Vec<u8>>,
     pub owner: MultisigScript,
