@@ -2,6 +2,9 @@
 name = "sundae-strategies"
 version = "0.1.0"
 edition = "2024"
+description = "Helper library to develop Sundae strategies"
+license = "Apache-2.0"
+repository = "https://github.com/SundaeSwap-finance/sundae-balius-server/"
 
 [dependencies]
 balius-sdk = { git = "https://github.com/txpipe/balius.git", version = "0.4" }
