@@ -2,7 +2,6 @@ pub mod keys;
 pub mod kv;
 pub mod types;
 
-use url::Url;
 use balius_sdk::{
     _internal::Handler,
     Ack, Config, Error, FnHandler, Tx, Utxo, UtxoMatcher, Worker, WorkerResult,
@@ -11,13 +10,14 @@ use balius_sdk::{
 };
 use serde::{Deserialize, Serialize};
 use tracing::{info, trace};
+use url::Url;
 
 use crate::{
+    keys::get_signer_key,
     types::{
         Interval, Order, OrderDatum, OutputReference, SignedStrategyExecution,
         StrategyAuthorization, StrategyExecution, SubmitSSE, TransactionId, serialize,
     },
-    keys::get_signer_key,
 };
 
 #[derive(Deserialize)]
@@ -52,11 +52,13 @@ pub struct SeenOrderDetails {
     pub order: OrderDatum,
 }
 
-pub struct NewOrderCallback<T>(Option<fn(Config<T>, SeenOrderDetails) -> WorkerResult<Ack>>);
-pub struct TxCallback<T>(Option<fn(Config<T>, Tx, Vec<SeenOrderDetails>) -> WorkerResult<Ack>>);
+pub type NewOrderCallback<T> = fn(Config<T>, SeenOrderDetails) -> WorkerResult<Ack>;
+struct NewOrderCallbackHandler<T>(Option<NewOrderCallback<T>>);
+pub type TxCallback<T> = fn(Config<T>, Tx, Vec<SeenOrderDetails>) -> WorkerResult<Ack>;
+struct TxCallbackHandler<T>(Option<TxCallback<T>>);
 pub struct Strategy<T> {
-    new_order_callback: NewOrderCallback<T>,
-    tx_callback: TxCallback<T>,
+    new_order_callback: NewOrderCallbackHandler<T>,
+    tx_callback: TxCallbackHandler<T>,
 }
 
 impl<T: Send + Sync + 'static> Strategy<T>
@@ -65,23 +67,17 @@ where
 {
     pub fn new() -> Self {
         Strategy {
-            new_order_callback: NewOrderCallback(None),
-            tx_callback: TxCallback(None),
+            new_order_callback: NewOrderCallbackHandler(None),
+            tx_callback: TxCallbackHandler(None),
         }
     }
 
-    pub fn on_new_order(
-        mut self,
-        f: fn(Config<T>, SeenOrderDetails) -> WorkerResult<Ack>,
-    ) -> Self {
-        self.new_order_callback = NewOrderCallback(Some(f));
+    pub fn on_new_order(mut self, f: NewOrderCallback<T>) -> Self {
+        self.new_order_callback = NewOrderCallbackHandler(Some(f));
         self
     }
-    pub fn on_each_tx(
-        mut self,
-        f: fn(Config<T>, Tx, Vec<SeenOrderDetails>) -> WorkerResult<Ack>,
-    ) -> Self {
-        self.tx_callback = TxCallback(Some(f));
+    pub fn on_each_tx(mut self, f: TxCallback<T>) -> Self {
+        self.tx_callback = TxCallbackHandler(Some(f));
         self
     }
     pub fn worker(self) -> Worker {
@@ -95,7 +91,16 @@ where
     }
 }
 
-impl<T: Send + Sync + 'static> Handler for NewOrderCallback<T>
+impl<T: Send + Sync + 'static> Default for Strategy<T>
+where
+    Config<T>: TryFrom<Vec<u8>, Error = balius_sdk::Error>,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T: Send + Sync + 'static> Handler for NewOrderCallbackHandler<T>
 where
     Config<T>: TryFrom<Vec<u8>, Error = balius_sdk::Error>,
 {
@@ -144,16 +149,23 @@ where
                 auth: Signature { signer },
             } => {
                 if signer == &key {
-                    info!("transaction output is a strategy order owned by us ({})", hex::encode(signer));
+                    info!(
+                        "transaction output is a strategy order owned by us ({})",
+                        hex::encode(signer)
+                    );
                 } else {
-                    info!("transaction output is a strategy order not owned by ({}), not us ({})", hex::encode(signer), hex::encode(&key));
+                    info!(
+                        "transaction output is a strategy order not owned by ({}), not us ({})",
+                        hex::encode(signer),
+                        hex::encode(&key)
+                    );
                     return Ok(Ack.try_into()?);
                 }
             }
             _ => {
                 info!("transaction output is not a strategy order");
-                return Ok(Ack.try_into()?)
-            },
+                return Ok(Ack.try_into()?);
+            }
         }
 
         info!(
@@ -173,8 +185,7 @@ where
         };
 
         // This is an order "under our custody", so we hold onto it
-        let mut all_seen: Vec<SeenOrderDetails> =
-            kv::get(KV_MANAGED_ORDERS)?.unwrap_or_default();
+        let mut all_seen: Vec<SeenOrderDetails> = kv::get(KV_MANAGED_ORDERS)?.unwrap_or_default();
         all_seen.push(seen.clone());
         kv::set(KV_MANAGED_ORDERS, &all_seen)?;
 
@@ -189,7 +200,7 @@ where
     }
 }
 
-impl<T: Send + Sync + 'static> Handler for TxCallback<T>
+impl<T: Send + Sync + 'static> Handler for TxCallbackHandler<T>
 where
     Config<T>: TryFrom<Vec<u8>, Error = balius_sdk::Error>,
 {
@@ -237,8 +248,8 @@ where
     }
 }
 
-pub const KV_MANAGED_ORDERS: &'static str = "managed_orders";
-pub const STRATEGY_KEY: &'static str = "default";
+pub const KV_MANAGED_ORDERS: &str = "managed_orders";
+pub const STRATEGY_KEY: &str = "default";
 
 pub fn submit_execution(
     network: &Network,

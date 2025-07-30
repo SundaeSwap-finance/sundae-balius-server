@@ -5,15 +5,12 @@ use std::time::Duration;
 use balius_sdk::{Ack, Config, Tx, WorkerResult};
 use tracing::info;
 
-use crate::{
-    config::DCAConfig,
-};
+use crate::config::DCAConfig;
 
 use sundae_strategies::{
+    SeenOrderDetails, Strategy,
     types::{Interval, Order},
-    SeenOrderDetails, Strategy
 };
-
 
 fn on_each_tx(
     config: Config<DCAConfig>,
@@ -49,7 +46,7 @@ fn trigger_buy(config: &config::DCAConfig, tx: &Tx, order: &SeenOrderDetails) ->
         offer: (
             config.offer_token.policy_id.clone(),
             config.offer_token.asset_name.clone(),
-            config.offer_amount
+            config.offer_amount,
         ),
         min_received: (
             config.receive_token.policy_id.clone(),
