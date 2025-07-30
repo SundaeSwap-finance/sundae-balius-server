@@ -1,7 +1,7 @@
 use balius_sdk::Error;
 use serde::Deserialize;
 
-use crate::utils::Network;
+use sundae_strategies::Network;
 
 #[derive(Deserialize)]
 pub struct DCAConfig {

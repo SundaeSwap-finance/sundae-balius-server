@@ -1,6 +1,4 @@
 mod config;
-mod types;
-mod utils;
 
 use std::time::Duration;
 
@@ -9,9 +7,13 @@ use tracing::info;
 
 use crate::{
     config::DCAConfig,
-    types::{Interval, Order},
-    utils::strategies::{SeenOrderDetails, Strategy},
 };
+
+use sundae_strategies::{
+    types::{Interval, Order},
+    SeenOrderDetails, Strategy
+};
+
 
 fn on_each_tx(
     config: Config<DCAConfig>,
@@ -22,7 +24,7 @@ fn on_each_tx(
         let slots_elapsed = tx.block_slot - seen.slot;
         if slots_elapsed > config.interval {
             info!("{} slots elapsed, triggering a buy order", slots_elapsed);
-            trigger_buy(&config, &seen)?;
+            trigger_buy(&config, &tx, &seen)?;
         } else {
             info!(
                 "{} slots elapsed, out of {}; {} slots remaining before we trigger a buy...",
@@ -35,11 +37,11 @@ fn on_each_tx(
     Ok(Ack)
 }
 
-fn trigger_buy(config: &config::DCAConfig, order: &SeenOrderDetails) -> WorkerResult<()> {
+fn trigger_buy(config: &config::DCAConfig, tx: &Tx, order: &SeenOrderDetails) -> WorkerResult<()> {
     let (offer_policy_id, offer_asset_name) = config.offer_token()?;
     let (receive_policy_id, receive_asset_name) = config.receive_token()?;
 
-    let now = config.network.to_unix_time(order.slot);
+    let now = config.network.to_unix_time(tx.block_slot);
     let valid_for = Duration::from_secs_f64(20. * 60.);
     let validity_range = Interval::inclusive_range(
         now - valid_for.as_millis() as u64,
@@ -55,7 +57,7 @@ fn trigger_buy(config: &config::DCAConfig, order: &SeenOrderDetails) -> WorkerRe
         ),
     };
 
-    utils::strategies::submit_execution(&config.network, &order.utxo, validity_range, swap)?;
+    sundae_strategies::submit_execution(&config.network, &order.utxo, validity_range, swap)?;
 
     Ok(())
 }

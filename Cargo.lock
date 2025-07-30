@@ -293,8 +293,8 @@ dependencies = [
 
 [[package]]
 name = "balius-macros"
-version = "0.3.4"
-source = "git+https://github.com/txpipe/balius.git?rev=35db068#35db068c478a0a3091e3ab6b002bf65ecd4e30a1"
+version = "0.4.0"
+source = "git+https://github.com/txpipe/balius.git#f032823b60305d4ab074b6a2727c80d324ba0ec1"
 dependencies = [
  "quote",
  "syn",
@@ -332,8 +332,8 @@ dependencies = [
 
 [[package]]
 name = "balius-sdk"
-version = "0.3.4"
-source = "git+https://github.com/txpipe/balius.git?rev=35db068#35db068c478a0a3091e3ab6b002bf65ecd4e30a1"
+version = "0.4.0"
+source = "git+https://github.com/txpipe/balius.git#f032823b60305d4ab074b6a2727c80d324ba0ec1"
 dependencies = [
  "balius-macros",
  "hex",
@@ -922,6 +922,7 @@ dependencies = [
  "plutus-parser",
  "serde",
  "serde_json",
+ "sundae-strategies",
  "tracing",
  "url",
  "utxorpc-spec 0.16.0",
@@ -3355,6 +3356,20 @@ name = "subtle"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
+
+[[package]]
+name = "sundae-strategies"
+version = "0.1.0"
+dependencies = [
+ "balius-sdk",
+ "hex",
+ "plutus-parser",
+ "serde",
+ "serde_json",
+ "tracing",
+ "url",
+ "utxorpc-spec 0.16.0",
+]
 
 [[package]]
 name = "syn"
