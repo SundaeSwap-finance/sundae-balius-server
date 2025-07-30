@@ -5,5 +5,5 @@ members = [
     "balius-server",
     "balius-worker-builder",
     "sundae-strategies",
-    "workers/dollar-cost-average",
+    "workers/*",
 ]

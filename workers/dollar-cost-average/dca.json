@@ -1,0 +1,8 @@
+{
+  "network": "preview",
+  "interval": 10,
+  "offer_token": "2fe3c3364b443194b10954771c95819b8d6ed464033c21f03f8facb5.69555344",
+  "offer_amount": 1000000,
+  "receive_token": ".",
+  "receive_amount_min": 1
+}
