@@ -111,7 +111,7 @@ impl WorkerService {
             };
             match run(config, runtime, cancel).await {
                 Ok(_) => println!("Worker done!"),
-                Err(e) => println!("Error! {:#?}", e),
+                Err(e) => println!("Error! {e:#?}"),
             }
         });
 

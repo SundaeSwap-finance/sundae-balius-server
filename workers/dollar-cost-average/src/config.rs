@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use sundae_strategies::{types::AssetId, Network};
+use sundae_strategies::{Network, types::AssetId};
 
 #[derive(Deserialize)]
 pub struct DCAConfig {
