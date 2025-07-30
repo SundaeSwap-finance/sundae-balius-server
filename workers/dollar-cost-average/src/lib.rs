@@ -18,9 +18,9 @@ use sundae_strategies::{
 fn on_each_tx(
     config: Config<DCAConfig>,
     tx: Tx,
-    orders: Vec<SeenOrderDetails>,
+    tracked_orders: Vec<SeenOrderDetails>,
 ) -> WorkerResult<Ack> {
-    for seen in orders {
+    for seen in tracked_orders {
         let slots_elapsed = tx.block_slot - seen.slot;
         if slots_elapsed > config.interval {
             info!("{} slots elapsed, triggering a buy order", slots_elapsed);
@@ -38,9 +38,6 @@ fn on_each_tx(
 }
 
 fn trigger_buy(config: &config::DCAConfig, tx: &Tx, order: &SeenOrderDetails) -> WorkerResult<()> {
-    let (offer_policy_id, offer_asset_name) = config.offer_token()?;
-    let (receive_policy_id, receive_asset_name) = config.receive_token()?;
-
     let now = config.network.to_unix_time(tx.block_slot);
     let valid_for = Duration::from_secs_f64(20. * 60.);
     let validity_range = Interval::inclusive_range(
@@ -49,10 +46,14 @@ fn trigger_buy(config: &config::DCAConfig, tx: &Tx, order: &SeenOrderDetails) ->
     );
 
     let swap = Order::Swap {
-        offer: (offer_policy_id, offer_asset_name, config.offer_amount),
+        offer: (
+            config.offer_token.policy_id.clone(),
+            config.offer_token.asset_name.clone(),
+            config.offer_amount
+        ),
         min_received: (
-            receive_policy_id,
-            receive_asset_name,
+            config.receive_token.policy_id.clone(),
+            config.receive_token.asset_name.clone(),
             config.receive_amount_min,
         ),
     };

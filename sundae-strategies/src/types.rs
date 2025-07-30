@@ -1,8 +1,37 @@
-use std::fmt::Debug;
+use std::fmt::{ self, Debug };
 
 use balius_sdk::txbuilder::{codec::minicbor, plutus::BigInt};
 use plutus_parser::AsPlutus;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de};
+
+pub struct AssetId { pub policy_id: Vec<u8>, pub asset_name: Vec<u8> }
+
+struct AssetIdVisitor;
+impl<'de> de::Visitor<'de> for AssetIdVisitor {
+    type Value = AssetId;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a string representing an assetId, in the format hexPolicyId.hexAssetName")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        let (policy_id, asset_name) = v.split_once(".").ok_or(E::custom("unexpected format"))?;
+        Ok(AssetId {
+            policy_id: hex::decode(policy_id).or(Err(E::custom("policyId was not hex encoded")))?,
+            asset_name: hex::decode(asset_name).or(Err(E::custom("assetName was not hex encoded")))?
+        })
+    }
+}
+impl<'de> Deserialize<'de> for AssetId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de> {
+        deserializer.deserialize_str(AssetIdVisitor)
+    }
+}
 
 #[derive(AsPlutus, Serialize, Deserialize, Debug, Clone)]
 pub struct OrderDatum {
