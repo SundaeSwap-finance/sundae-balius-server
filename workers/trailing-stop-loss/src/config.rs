@@ -8,6 +8,6 @@ pub struct Config {
     pub token: AssetId,
     pub amount: u64,
     pub base_price: f64,
-    pub step_percent: f64,
+    pub trail_percent: f64,
     pub receive_token: AssetId,
 }

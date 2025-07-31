@@ -63,10 +63,8 @@ fn on_each_tx(
             }
         }
 
-        let percent_change = percent_difference(base_price, price);
-        if percent_change >= config.step_percent {
-            let _ = kv::set(KEY, &price)?;
-        }
+        let new_base_price: f64 = f64::max(base_price, price * (1. - config.trail_percent));
+        let _ = kv::set(KEY, &new_base_price)?;
     }
 
     Ok(Ack)
@@ -138,10 +136,6 @@ fn token_price(pool_output: &TxOutput, pool_datum: &PoolDatum) -> f64 {
                 .unwrap()
                 .1 as f64
     }
-}
-
-fn percent_difference(original: f64, new: f64) -> f64 {
-    ((new - original) / original) * 100.
 }
 
 fn to_u64(big_int: &BigInt) -> Option<u64> {
