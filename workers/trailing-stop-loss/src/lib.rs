@@ -29,35 +29,30 @@ fn on_each_tx(
     let base_price = match kv::get::<f64>(KEY)? {
         Some(base_price) => base_price,
         None => {
-            kv::set(KEY, &config.base_price);
+            kv::set(KEY, &config.base_price)?;
             config.base_price
         }
     };
 
     for strategy in strategies {
-        let maybe_pool_update: Option<&TxOutput> = tx
-            .tx
-            .outputs
-            .iter()
-            .filter(|output| {
-                output
-                    .datum
-                    .as_ref()
-                    .filter(|datum| {
-                        let pool_datum = types::try_parse::<PoolDatum>(&datum.original_cbor);
-                        pool_datum
-                            .filter(|datum| datum.identifier == config.pool)
-                            .is_some()
-                    })
-                    .is_some()
-            })
-            .next();
+        let maybe_pool_update: Option<&TxOutput> = tx.tx.outputs.iter().find(|output| {
+            output
+                .datum
+                .as_ref()
+                .filter(|datum| {
+                    let pool_datum = types::try_parse::<PoolDatum>(&datum.original_cbor);
+                    pool_datum
+                        .filter(|datum| datum.identifier == config.pool)
+                        .is_some()
+                })
+                .is_some()
+        });
 
         if let Some(pool_update) = maybe_pool_update {
             let datum =
                 types::try_parse::<PoolDatum>(&pool_update.datum.as_ref().unwrap().original_cbor)
                     .unwrap();
-            let price = token_price(&pool_update, &datum);
+            let price = token_price(pool_update, &datum);
 
             if price < base_price {
                 info!(
@@ -69,7 +64,7 @@ fn on_each_tx(
 
             let percent_change = percent_difference(base_price, price);
             if percent_change >= config.step_percent {
-                kv::set(KEY, &price)?;
+                let _ = kv::set(KEY, &price)?;
             }
         }
     }
