@@ -1,0 +1,13 @@
+use serde::Deserialize;
+use sundae_strategies::{Network, types::AssetId};
+
+#[derive(Deserialize)]
+pub struct Config {
+    pub network: Network,
+    pub pool: Vec<u8>,
+    pub token: AssetId,
+    pub amount: u64,
+    pub base_price: f64,
+    pub step_percent: f64,
+    pub receive_token: AssetId,
+}

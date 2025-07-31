@@ -2204,21 +2204,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oracle-trades"
-version = "0.1.0"
-dependencies = [
- "balius-sdk",
- "hex",
- "plutus-parser",
- "serde",
- "serde_json",
- "sundae-strategies",
- "tracing",
- "url",
- "utxorpc-spec 0.16.0",
-]
-
-[[package]]
 name = "overload"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
