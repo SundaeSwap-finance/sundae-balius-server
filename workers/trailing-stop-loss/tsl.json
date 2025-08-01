@@ -1,0 +1,9 @@
+{
+  "network": "preview",
+  "pool": "bd9437d9ec1a559d053f05dc38d337c32d1d0746952ea961f874c39a",
+  "token": "99b071ce8580d6a3a11b4902145adb8bfd0d2a03935af8cf66403e15.524245525259",
+  "amount": 100000000,
+  "base_price": 0.000013,
+  "trail_percent": 0.15,
+  "receive_token": "."
+}

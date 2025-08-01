@@ -34,24 +34,30 @@ fn on_each_tx(
         }
     };
 
-    let maybe_pool_update: Option<&TxOutput> = tx.tx.outputs.iter().find(|output| {
-        output
-            .datum
-            .as_ref()
-            .filter(|datum| {
-                let pool_datum = types::try_parse::<PoolDatum>(&datum.original_cbor);
-                pool_datum
-                    .filter(|datum| datum.identifier == config.pool)
-                    .is_some()
-            })
-            .is_some()
-    });
+    info!("checking for pool output in tx {}", hex::encode(&tx.hash));
+    let mut maybe_pool_update: Option<(&TxOutput, PoolDatum)> = None;
+    for (idx, output) in tx.tx.outputs.iter().enumerate() {
+        info!("checking output {}", idx);
+        if let Some(datum) = &output.datum && !datum.original_cbor.is_empty() {
+            info!("output has a datum");
+            match types::parse::<PoolDatum>(&datum.original_cbor) {
+                Ok(pool_datum) => {
+                    info!("parsed as pool datum {:?}", pool_datum);
+                    if hex::encode(&pool_datum.identifier) == config.pool {
+                        maybe_pool_update = Some((&output, pool_datum.clone()));
+                        break;
+                    }
+                },
+                Err(e) => {
+                    info!("failed to parse: {:?}", e)
+                },
+            }
+        }
+    }
 
-    if let Some(pool_update) = maybe_pool_update {
-        let datum =
-            types::try_parse::<PoolDatum>(&pool_update.datum.as_ref().unwrap().original_cbor)
-                .unwrap();
-        let price = token_price(pool_update, &datum);
+    if let Some((pool_output, pool_datum)) = maybe_pool_update {
+        let price = token_price(pool_output, &pool_datum);
+        info!("pool update found, with price {}", price);
 
         if price < base_price {
             info!(
@@ -64,7 +70,10 @@ fn on_each_tx(
         }
 
         let new_base_price: f64 = f64::max(base_price, price * (1. - config.trail_percent));
-        let _ = kv::set(KEY, &new_base_price)?;
+        if new_base_price != base_price {
+            info!("updating new base price to {}", new_base_price);
+            let _ = kv::set(KEY, &new_base_price)?;
+        }
     }
 
     Ok(Ack)
@@ -109,7 +118,7 @@ fn token_price(pool_output: &TxOutput, pool_datum: &PoolDatum) -> f64 {
         .flat_map(|multiasset| {
             multiasset.assets.iter().map(|asset| {
                 (
-                    [multiasset.policy_id.to_vec(), asset.name.to_vec()].concat(),
+                    (multiasset.policy_id.to_vec(), asset.name.to_vec()),
                     asset.output_coin,
                 )
             })
@@ -117,22 +126,22 @@ fn token_price(pool_output: &TxOutput, pool_datum: &PoolDatum) -> f64 {
         .collect();
 
     // ADA?
-    if pool_datum.assets.0.is_empty() {
+    if pool_datum.assets.0.0.is_empty() && pool_datum.assets.0.1.is_empty() {
         (pool_output.coin - to_u64(&pool_datum.protocol_fees).unwrap()) as f64
             / assets
                 .iter()
-                .find(|(asset, _)| asset == &pool_datum.assets.1)
+                .find(|(asset, _)| asset.0 == pool_datum.assets.1.0 && asset.1 == pool_datum.assets.1.1)
                 .unwrap()
                 .1 as f64
     } else {
         assets
             .iter()
-            .find(|(asset, _)| asset == &pool_datum.assets.0)
+            .find(|(asset, _)| asset.0 == pool_datum.assets.0.0 && asset.1 == pool_datum.assets.0.1)
             .unwrap()
             .1 as f64
             / assets
                 .iter()
-                .find(|(asset, _)| asset == &pool_datum.assets.1)
+                .find(|(asset, _)| asset.0 == pool_datum.assets.1.0 && asset.1 == pool_datum.assets.1.1)
                 .unwrap()
                 .1 as f64
     }
