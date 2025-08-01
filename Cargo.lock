@@ -294,7 +294,7 @@ dependencies = [
 [[package]]
 name = "balius-macros"
 version = "0.4.0"
-source = "git+https://github.com/txpipe/balius.git#f032823b60305d4ab074b6a2727c80d324ba0ec1"
+source = "git+https://github.com/txpipe/balius.git#3a8834fb43a657215ce467c89e4884651a8b4dab"
 dependencies = [
  "quote",
  "syn",
@@ -333,7 +333,7 @@ dependencies = [
 [[package]]
 name = "balius-sdk"
 version = "0.4.0"
-source = "git+https://github.com/txpipe/balius.git#f032823b60305d4ab074b6a2727c80d324ba0ec1"
+source = "git+https://github.com/txpipe/balius.git#3a8834fb43a657215ce467c89e4884651a8b4dab"
 dependencies = [
  "balius-macros",
  "hex",

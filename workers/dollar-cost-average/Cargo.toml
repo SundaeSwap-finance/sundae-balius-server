@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-balius-sdk = { git = "https://github.com/txpipe/balius.git" }
+balius-sdk = { workspace = true }
 sundae-strategies = { path = "../../sundae-strategies" }
 hex = "0.4"
 plutus-parser = { git = "https://github.com/SundaeSwap-finance/plutus-parser", rev = "8a77d17", features = ["derive"] }

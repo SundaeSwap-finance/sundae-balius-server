@@ -7,3 +7,6 @@ members = [
     "sundae-strategies",
     "workers/*",
 ]
+
+[workspace.dependencies]
+balius-sdk = { git = "https://github.com/txpipe/balius.git" }
