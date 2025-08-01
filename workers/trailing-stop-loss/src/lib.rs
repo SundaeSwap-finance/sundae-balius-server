@@ -5,8 +5,7 @@ use std::time::Duration;
 use balius_sdk::{Ack, Config, Tx, WorkerResult};
 use config::Config as StrategyConfig;
 use sundae_strategies::{
-    SeenOrderDetails, Strategy, kv,
-    types::{self, Interval, Order, PoolDatum},
+    kv, types::{self, asset_amount, Interval, Order, PoolDatum}, SeenOrderDetails, Strategy
 };
 use tracing::info;
 
@@ -27,31 +26,21 @@ fn on_each_tx(
     tx: Tx,
     strategies: Vec<SeenOrderDetails>,
 ) -> WorkerResult<Ack> {
+
     let mut new_price: Option<(String, f64)> = None;
     for output in tx.tx.outputs.iter() {
-        if let Some(datum) = &output.datum
-            && !datum.original_cbor.is_empty()
-        {
-            match types::parse::<PoolDatum>(&datum.original_cbor) {
-                Ok(pool_datum) => {
-                    let pool_ident = hex::encode(&pool_datum.identifier);
-                    if pool_ident == config.pool {
-                        let pool_price = pool_datum.raw_price(output);
-                        new_price = Some((pool_ident, pool_price));
-                        // maybe_pool_update = Some();
-                        break;
-                    }
-                }
-                Err(e) => {
-                    info!("failed to parse: {:?}", e)
-                }
+        if let Some(datum) = &output.datum && !datum.original_cbor.is_empty() {
+            if let Ok(pool_datum) = types::parse::<PoolDatum>(&datum.original_cbor) {
+                let pool_price = pool_datum.raw_price(output);
+                new_price = Some((hex::encode(pool_datum.identifier), pool_price));
+                // maybe_pool_update = Some();
+                break;
             }
         }
     }
 
     if let Some((pool_ident, pool_price)) = new_price {
-        let base_price =
-            kv::get::<f64>(base_price_key(&pool_ident).as_str())?.unwrap_or(config.base_price);
+        let base_price = kv::get::<f64>(base_price_key(&pool_ident).as_str())?.unwrap_or(0.0);
         info!("pool update found, with price {}", pool_price);
 
         if pool_price < base_price {
@@ -88,19 +77,18 @@ fn trigger_sell(
 
     let swap = Order::Swap {
         offer: (
-            config.token.policy_id.clone(),
-            config.token.asset_name.clone(),
-            config.amount,
+            config.give_token.policy_id.clone(),
+            config.give_token.asset_name.clone(),
+            asset_amount(&strategy.utxo, &config.give_token),
         ),
         min_received: (
             config.receive_token.policy_id.clone(),
             config.receive_token.asset_name.clone(),
-            // We need to truncate here, since we can't get a partial coin
             1,
         ),
     };
 
-    sundae_strategies::submit_execution(&config.network, &strategy.utxo, validity_range, swap)?;
+    sundae_strategies::submit_execution(&config.network, &strategy.output, validity_range, swap)?;
     Ok(Ack)
 }
 

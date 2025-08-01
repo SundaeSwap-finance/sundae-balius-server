@@ -71,39 +71,43 @@ fn to_u64(big_int: &BigInt) -> Option<u64> {
     }
 }
 
+pub fn asset_amount(output: &TxOutput, find_asset: &AssetId) -> u64 {
+    if find_asset.is_ada() {
+        output.coin
+    } else {
+        output.assets.iter().filter_map(|multiasset| {
+            let policy_id = multiasset.policy_id.to_vec();
+            multiasset.assets.iter().filter_map(|asset| {
+                let asset_name = asset.name.to_vec();
+                if policy_id == find_asset.policy_id && asset_name == find_asset.asset_name {
+                    Some(asset.output_coin)
+                } else {
+                    None
+                }
+            })
+            .next()
+        })
+        .next()
+        .unwrap_or(0u64)
+    }
+}
+
+
 impl PoolDatum {
     /// The raw price of the assets in the pool; not that this doesn't account for decimal places: for example,
     /// for an ADA/SUNDAE pair, this will give the lovelace per sprinkles
     /// If the decimal places on the token are the same, this will work out to the same value, but if they
     /// have different decimal places, this could be non-intuitive
     pub fn raw_price(&self, output: &TxOutput) -> f64 {
-        let assets: Vec<_> = output
-            .assets
-            .iter()
-            .flat_map(|multiasset| {
-                multiasset.assets.iter().map(|asset| {
-                    (
-                        AssetId { policy_id: multiasset.policy_id.to_vec(), asset_name: asset.name.to_vec() },
-                        asset.output_coin,
-                    )
-                })
-            })
-            .collect();
         let asset_a: AssetId = self.assets.0.clone().into();
         let asset_b: AssetId = self.assets.1.clone().into();
 
         let reserves_a = if asset_a.is_ada() {
             output.coin - to_u64(&self.protocol_fees).expect("the pool protocol fees should never exceed u64 max")
         } else {
-            assets
-                .iter()
-                .filter_map(|(asset, amt)| if asset == &asset_a { Some(*amt) } else { None })
-                .next().expect("must have asset_a")
+            asset_amount(output, &asset_a)
         };
-        let reserves_b = assets
-            .iter()
-            .filter_map(|(asset, amt)| if asset == &asset_b { Some(*amt) } else { None })
-            .next().expect("must have asset_b");
+        let reserves_b = asset_amount(output, &asset_b);
 
         (reserves_a as f64) / (reserves_b as f64)
     }

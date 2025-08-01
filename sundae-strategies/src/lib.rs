@@ -11,6 +11,7 @@ use balius_sdk::{
 };
 use serde::{Deserialize, Serialize};
 use tracing::{info, trace};
+use utxorpc_spec::utxorpc::v1alpha::cardano::TxOutput;
 
 use crate::{
     types::{
@@ -48,7 +49,8 @@ impl Network {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SeenOrderDetails {
     pub slot: u64,
-    pub utxo: OutputReference,
+    pub output: OutputReference,
+    pub utxo: TxOutput,
     pub order: OrderDatum,
 }
 
@@ -116,6 +118,7 @@ where
         let Some(datum) = utxo
             .utxo
             .datum
+            .clone()
             .and_then(|d| types::try_parse::<OrderDatum>(&d.original_cbor))
         else {
             trace!(
@@ -165,10 +168,11 @@ where
         // Save this order in our key-value store
         let seen = SeenOrderDetails {
             slot: utxo.block_slot,
-            utxo: OutputReference {
+            output: OutputReference {
                 transaction_id: TransactionId(utxo.tx_hash),
                 output_index: utxo.index,
             },
+            utxo: utxo.utxo.clone(),
             order: datum,
         };
 
@@ -218,7 +222,7 @@ where
 
         seen_orders.retain(|spent| {
             let (spent_hash, spent_index) =
-                (&spent.utxo.transaction_id.0, &spent.utxo.output_index);
+                (&spent.output.transaction_id.0, &spent.output.output_index);
             !spent_inputs
                 .iter()
                 .any(|(hash, index)| spent_hash == hash && spent_index == index)

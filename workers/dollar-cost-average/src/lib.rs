@@ -55,7 +55,7 @@ fn trigger_buy(config: &config::DCAConfig, tx: &Tx, order: &SeenOrderDetails) ->
         ),
     };
 
-    sundae_strategies::submit_execution(&config.network, &order.utxo, validity_range, swap)?;
+    sundae_strategies::submit_execution(&config.network, &order.output, validity_range, swap)?;
 
     Ok(())
 }
@@ -63,6 +63,8 @@ fn trigger_buy(config: &config::DCAConfig, tx: &Tx, order: &SeenOrderDetails) ->
 #[balius_sdk::main]
 fn main() -> Worker {
     balius_sdk::logging::init();
+
+    info!("Dollar Cost Average worker starting!");
 
     Strategy::<DCAConfig>::new().on_each_tx(on_each_tx).worker()
 }
