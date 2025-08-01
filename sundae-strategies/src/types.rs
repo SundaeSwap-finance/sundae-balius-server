@@ -167,6 +167,17 @@ pub enum IntervalBoundType {
     PositiveInfinity,
 }
 
+#[derive(Debug)]
+pub enum ParseError {
+    Decode(minicbor::decode::Error),
+    Parse(plutus_parser::DecodeError),
+}
+
+pub fn parse<T: AsPlutus>(bytes: &[u8]) -> Result<T, ParseError> {
+    let data = minicbor::decode(bytes).map_err(|e| ParseError::Decode(e))?;
+    T::from_plutus(data).map_err(|e| ParseError::Parse(e))
+}
+
 pub fn try_parse<T: AsPlutus>(bytes: &[u8]) -> Option<T> {
     let data = minicbor::decode(bytes).ok()?;
     T::from_plutus(data).ok()
