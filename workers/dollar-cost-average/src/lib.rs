@@ -8,14 +8,14 @@ use tracing::info;
 use crate::config::DCAConfig;
 
 use sundae_strategies::{
-    SeenOrderDetails, Strategy,
+    ManagedOrder, Strategy,
     types::{Interval, Order},
 };
 
 fn on_each_tx(
     config: Config<DCAConfig>,
     tx: Tx,
-    tracked_orders: Vec<SeenOrderDetails>,
+    tracked_orders: Vec<ManagedOrder>,
 ) -> WorkerResult<Ack> {
     for seen in tracked_orders {
         let slots_elapsed = tx.block_slot - seen.slot;
@@ -34,7 +34,7 @@ fn on_each_tx(
     Ok(Ack)
 }
 
-fn trigger_buy(config: &config::DCAConfig, tx: &Tx, order: &SeenOrderDetails) -> WorkerResult<()> {
+fn trigger_buy(config: &config::DCAConfig, tx: &Tx, order: &ManagedOrder) -> WorkerResult<()> {
     let now = config.network.to_unix_time(tx.block_slot);
     let valid_for = Duration::from_secs_f64(20. * 60.);
     let validity_range = Interval::inclusive_range(

@@ -5,7 +5,8 @@ use std::time::Duration;
 use balius_sdk::{Ack, Config, Tx, WorkerResult};
 use config::Config as StrategyConfig;
 use sundae_strategies::{
-    kv, types::{self, asset_amount, Interval, Order, PoolDatum}, SeenOrderDetails, Strategy
+    ManagedOrder, Strategy, kv,
+    types::{self, Interval, Order, PoolDatum, asset_amount},
 };
 use tracing::info;
 
@@ -24,12 +25,13 @@ fn base_price_key(pool_ident: &String) -> String {
 fn on_each_tx(
     config: Config<StrategyConfig>,
     tx: Tx,
-    strategies: Vec<SeenOrderDetails>,
+    strategies: Vec<ManagedOrder>,
 ) -> WorkerResult<Ack> {
-
     let mut new_price: Option<(String, f64)> = None;
     for output in tx.tx.outputs.iter() {
-        if let Some(datum) = &output.datum && !datum.original_cbor.is_empty() {
+        if let Some(datum) = &output.datum
+            && !datum.original_cbor.is_empty()
+        {
             if let Ok(pool_datum) = types::parse::<PoolDatum>(&datum.original_cbor) {
                 let pool_price = pool_datum.raw_price(output);
                 new_price = Some((hex::encode(pool_datum.identifier), pool_price));
@@ -63,11 +65,7 @@ fn on_each_tx(
     Ok(Ack)
 }
 
-fn trigger_sell(
-    config: &StrategyConfig,
-    tx: &Tx,
-    strategy: &SeenOrderDetails,
-) -> WorkerResult<Ack> {
+fn trigger_sell(config: &StrategyConfig, tx: &Tx, strategy: &ManagedOrder) -> WorkerResult<Ack> {
     let now = config.network.to_unix_time(tx.block_slot);
     let valid_for = Duration::from_secs_f64(20. * 60.);
     let validity_range = Interval::inclusive_range(

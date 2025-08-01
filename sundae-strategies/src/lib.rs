@@ -4,21 +4,16 @@ pub mod types;
 
 use url::Url;
 use balius_sdk::{
-    _internal::Handler,
-    Ack, Config, Error, FnHandler, Tx, Utxo, UtxoMatcher, Worker, WorkerResult,
-    http::{HttpRequest, HttpResponse},
-    wit,
+    Ack, Config, Error, Tx, Utxo, UtxoMatcher, Worker, WorkerResult, _internal::Handler, http::{HttpRequest, HttpResponse}, wit,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{info, trace};
 use utxorpc_spec::utxorpc::v1alpha::cardano::TxOutput;
 
 use crate::{
-    types::{
-        Interval, Order, OrderDatum, OutputReference, SignedStrategyExecution,
-        StrategyAuthorization, StrategyExecution, SubmitSSE, TransactionId, serialize,
-    },
-    keys::get_signer_key,
+    keys::get_signer_key, types::{
+        serialize, Interval, Order, OrderDatum, OutputReference, PoolDatum, SignedStrategyExecution, StrategyAuthorization, StrategyExecution, SubmitSSE, TransactionId
+    }
 };
 
 #[derive(Deserialize)]
@@ -47,18 +42,37 @@ impl Network {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SeenOrderDetails {
+pub struct ManagedOrder {
     pub slot: u64,
     pub output: OutputReference,
     pub utxo: TxOutput,
     pub order: OrderDatum,
 }
 
-pub struct NewOrderCallback<T>(Option<fn(Config<T>, SeenOrderDetails) -> WorkerResult<Ack>>);
-pub struct TxCallback<T>(Option<fn(Config<T>, Tx, Vec<SeenOrderDetails>) -> WorkerResult<Ack>>);
+pub struct PoolState {
+    pub slot: u64,
+    pub output: OutputReference,
+    pub utxo: TxOutput,
+    pub pool_datum: PoolDatum,
+}
+
+pub type NewStrategyCallback<T> = Option<fn(Config<T>, ManagedOrder) -> WorkerResult<Ack>>;
+pub type NewPoolStateCallback<T> = Option<fn(Config<T>, PoolState) -> WorkerResult<Ack>>;
+pub type EachTxCallback<T> = Option<fn(Config<T>, Tx, Vec<ManagedOrder>) -> WorkerResult<Ack>>;
+
 pub struct Strategy<T> {
-    new_order_callback: NewOrderCallback<T>,
-    tx_callback: TxCallback<T>,
+    new_strategy_callback: NewStrategyCallback<T>,
+    new_pool_state_callback: NewPoolStateCallback<T>,
+    each_tx_callback: EachTxCallback<T>,
+}
+impl<T> Clone for Strategy<T> {
+    fn clone(&self) -> Self {
+        Self {
+            each_tx_callback: self.each_tx_callback.clone(),
+            new_pool_state_callback: self.new_pool_state_callback.clone(),
+            new_strategy_callback: self.new_strategy_callback.clone(),
+        }
+    }
 }
 
 impl<T: Send + Sync + 'static> Strategy<T>
@@ -67,37 +81,45 @@ where
 {
     pub fn new() -> Self {
         Strategy {
-            new_order_callback: NewOrderCallback(None),
-            tx_callback: TxCallback(None),
+            new_strategy_callback: None,
+            new_pool_state_callback: None,
+            each_tx_callback: None,
         }
     }
 
     pub fn on_new_order(
         mut self,
-        f: fn(Config<T>, SeenOrderDetails) -> WorkerResult<Ack>,
+        f: fn(Config<T>, ManagedOrder) -> WorkerResult<Ack>,
     ) -> Self {
-        self.new_order_callback = NewOrderCallback(Some(f));
+        self.new_strategy_callback = Some(f);
+        self
+    }
+    pub fn on_new_pool_state(
+        mut self,
+        f: fn(Config<T>, PoolState) -> WorkerResult<Ack>,
+    ) -> Self {
+        self.new_pool_state_callback = Some(f);
         self
     }
     pub fn on_each_tx(
         mut self,
-        f: fn(Config<T>, Tx, Vec<SeenOrderDetails>) -> WorkerResult<Ack>,
+        f: fn(Config<T>, Tx, Vec<ManagedOrder>) -> WorkerResult<Ack>,
     ) -> Self {
-        self.tx_callback = TxCallback(Some(f));
+        self.each_tx_callback = Some(f);
         self
     }
+
+
     pub fn worker(self) -> Worker {
-        let new_order = self.new_order_callback;
-        let tx = self.tx_callback;
         Worker::new()
-            .with_request_handler("get-signer-key", FnHandler::from(get_signer_key::<T>))
-            .with_utxo_handler(UtxoMatcher::all(), new_order)
-            .with_tx_handler(UtxoMatcher::all(), tx)
+            .with_request_handler("get-signer-key", self.clone())
+            .with_utxo_handler(UtxoMatcher::all(), self.clone())
+            .with_tx_handler(UtxoMatcher::all(), self.clone())
             .with_signer(STRATEGY_KEY, "ed25519")
     }
 }
 
-impl<T: Send + Sync + 'static> Handler for NewOrderCallback<T>
+impl<T: Send + Sync + 'static> Handler for Strategy<T>
 where
     Config<T>: TryFrom<Vec<u8>, Error = balius_sdk::Error>,
 {
@@ -107,7 +129,24 @@ where
         event: wit::Event,
     ) -> Result<wit::Response, wit::HandleError> {
         let config: Config<T> = config.try_into()?;
-        let utxo: Utxo<()> = event.try_into()?;
+
+        let result = if let Ok(tx) = event.clone().try_into() {
+            self.handle_tx(config, tx)
+        } else if let Ok(utxo) = event.clone().try_into() {
+            self.handle_utxo(config, utxo)
+        } else if let Ok(params) = event.clone().try_into() {
+            let result = get_signer_key(config, params)?;
+            return Ok(result.try_into()?);
+        } else {
+            Ok(Ack)
+        };
+
+        Ok(result?.try_into()?)
+    }
+}
+
+impl<T: Send + Sync + 'static> Strategy<T> {
+    fn handle_utxo(&self, config: Config<T>, utxo: Utxo<()>) -> WorkerResult<Ack> {
         trace!(
             slot = utxo.block_slot,
             tx_ref = format!("{}#{}", hex::encode(&utxo.tx_hash), utxo.index),
@@ -126,7 +165,7 @@ where
                 tx_ref = format!("{}#{}", hex::encode(&utxo.tx_hash), utxo.index),
                 "transaction output not a sundae v3 order",
             );
-            return Ok(Ack.try_into()?);
+            return Ok(Ack);
         };
 
         trace!(
@@ -136,7 +175,7 @@ where
         );
 
         let Some(key) = balius_sdk::get_public_keys().remove(STRATEGY_KEY) else {
-            return Err(Error::Internal("key not found".into()).into());
+            return Err(Error::Internal("key not found".into()));
         };
 
         // Check if it's *our* order
@@ -150,12 +189,12 @@ where
                     info!("transaction output is a strategy order owned by us ({})", hex::encode(signer));
                 } else {
                     info!("transaction output is a strategy order not owned by ({}), not us ({})", hex::encode(signer), hex::encode(&key));
-                    return Ok(Ack.try_into()?);
+                    return Ok(Ack);
                 }
             }
             _ => {
                 info!("transaction output is not a strategy order");
-                return Ok(Ack.try_into()?)
+                return Ok(Ack)
             },
         }
 
@@ -166,7 +205,7 @@ where
         );
 
         // Save this order in our key-value store
-        let seen = SeenOrderDetails {
+        let seen = ManagedOrder {
             slot: utxo.block_slot,
             output: OutputReference {
                 transaction_id: TransactionId(utxo.tx_hash),
@@ -177,33 +216,25 @@ where
         };
 
         // This is an order "under our custody", so we hold onto it
-        let mut all_seen: Vec<SeenOrderDetails> =
+        let mut all_seen: Vec<ManagedOrder> =
             kv::get(KV_MANAGED_ORDERS)?.unwrap_or_default();
         all_seen.push(seen.clone());
         kv::set(KV_MANAGED_ORDERS, &all_seen)?;
 
         info!("now tracking {} orders", all_seen.len());
 
-        if let Some(callback) = self.0 {
-            let response = callback(config, seen)?;
-            Ok(response.try_into()?)
+        if let Some(callback) = self.new_strategy_callback {
+            callback(config, seen)
         } else {
-            Ok(Ack.try_into()?)
+            Ok(Ack)
         }
     }
-}
 
-impl<T: Send + Sync + 'static> Handler for TxCallback<T>
-where
-    Config<T>: TryFrom<Vec<u8>, Error = balius_sdk::Error>,
-{
-    fn handle(
+    fn handle_tx(
         &self,
-        config: wit::Config,
-        event: wit::Event,
-    ) -> Result<wit::Response, wit::HandleError> {
-        let config: Config<T> = config.try_into()?;
-        let tx: Tx = event.try_into()?;
+        config: Config<T>,
+        tx: Tx,
+    ) -> WorkerResult<Ack> {
         trace!(
             slot = tx.block_slot,
             tx_hash = hex::encode(&tx.hash),
@@ -217,7 +248,7 @@ where
             .collect::<Vec<_>>();
 
         trace!("Marking orders as spent, if any...");
-        let mut seen_orders: Vec<SeenOrderDetails> =
+        let mut seen_orders: Vec<ManagedOrder> =
             kv::get(KV_MANAGED_ORDERS)?.unwrap_or_default();
 
         seen_orders.retain(|spent| {
@@ -232,11 +263,10 @@ where
 
         trace!("remaining orders: {:?}", seen_orders);
 
-        if let Some(callback) = self.0 {
-            let response = callback(config, tx, seen_orders)?;
-            Ok(response.try_into()?)
+        if let Some(callback) = self.each_tx_callback {
+            callback(config, tx, seen_orders)
         } else {
-            Ok(Ack.try_into()?)
+            Ok(Ack)
         }
     }
 }
