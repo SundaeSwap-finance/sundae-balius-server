@@ -13,15 +13,15 @@ use sundae_strategies::{
 };
 
 fn on_each_tx(
-    config: Config<DCAConfig>,
-    tx: Tx,
-    tracked_orders: Vec<ManagedOrder>,
+    config: &Config<DCAConfig>,
+    tx: &Tx,
+    tracked_orders: &Vec<ManagedOrder>,
 ) -> WorkerResult<Ack> {
     for seen in tracked_orders {
         let slots_elapsed = tx.block_slot - seen.slot;
         if slots_elapsed > config.interval {
             info!("{} slots elapsed, triggering a buy order", slots_elapsed);
-            trigger_buy(&config, &tx, &seen)?;
+            trigger_buy(&config, config.network.to_unix_time(tx.block_slot), &seen)?;
         } else {
             info!(
                 "{} slots elapsed, out of {}; {} slots remaining before we trigger a buy...",
@@ -34,8 +34,7 @@ fn on_each_tx(
     Ok(Ack)
 }
 
-fn trigger_buy(config: &config::DCAConfig, tx: &Tx, order: &ManagedOrder) -> WorkerResult<()> {
-    let now = config.network.to_unix_time(tx.block_slot);
+fn trigger_buy(config: &config::DCAConfig, now: u64, order: &ManagedOrder) -> WorkerResult<()> {
     let valid_for = Duration::from_secs_f64(20. * 60.);
     let validity_range = Interval::inclusive_range(
         now - valid_for.as_millis() as u64,

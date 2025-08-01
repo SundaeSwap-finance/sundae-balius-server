@@ -2,11 +2,10 @@ mod config;
 
 use std::time::Duration;
 
-use balius_sdk::{Ack, Config, Tx, WorkerResult};
+use balius_sdk::{Ack, Config, WorkerResult};
 use config::Config as StrategyConfig;
 use sundae_strategies::{
-    ManagedOrder, Strategy, kv,
-    types::{self, Interval, Order, PoolDatum, asset_amount},
+    kv, types::{asset_amount, Interval, Order}, ManagedOrder, PoolState, Strategy
 };
 use tracing::info;
 
@@ -22,51 +21,43 @@ fn base_price_key(pool_ident: &String) -> String {
 // - if % increase >= step_percent, increase base price
 // - If price falls below that (by some margin?) sell
 
-fn on_each_tx(
-    config: Config<StrategyConfig>,
-    tx: Tx,
-    strategies: Vec<ManagedOrder>,
+fn on_new_pool_state(
+    config: &Config<StrategyConfig>,
+    pool_state: &PoolState,
+    strategies: &Vec<ManagedOrder>,
 ) -> WorkerResult<Ack> {
-    let mut new_price: Option<(String, f64)> = None;
-    for output in tx.tx.outputs.iter() {
-        if let Some(datum) = &output.datum
-            && !datum.original_cbor.is_empty()
-        {
-            if let Ok(pool_datum) = types::parse::<PoolDatum>(&datum.original_cbor) {
-                let pool_price = pool_datum.raw_price(output);
-                new_price = Some((hex::encode(pool_datum.identifier), pool_price));
-                // maybe_pool_update = Some();
-                break;
-            }
+
+    let pool_price = pool_state.pool_datum.raw_price(&pool_state.utxo);
+    let pool_ident = hex::encode(&pool_state.pool_datum.identifier);
+
+    let base_price = kv::get::<f64>(base_price_key(&pool_ident).as_str())?.unwrap_or(0.0);
+
+    info!("pool update found, with price {} against base price {}", pool_price, base_price);
+
+    if pool_price < base_price {
+        info!(
+            "price has fallen to {}, below the base price of {}. Triggering a sell order...",
+            pool_price, base_price,
+        );
+        for strategy in strategies {
+            return trigger_sell(&config, config.network.to_unix_time(pool_state.slot), &strategy);
         }
     }
 
-    if let Some((pool_ident, pool_price)) = new_price {
-        let base_price = kv::get::<f64>(base_price_key(&pool_ident).as_str())?.unwrap_or(0.0);
-        info!("pool update found, with price {}", pool_price);
-
-        if pool_price < base_price {
-            info!(
-                "price has fallen to {}, below the base price of {}. Triggering a sell order...",
-                pool_price, base_price,
-            );
-            for strategy in strategies {
-                return trigger_sell(&config, &tx, &strategy);
-            }
-        }
-
-        let new_base_price: f64 = f64::max(base_price, pool_price * (1. - config.trail_percent));
-        if new_base_price != base_price {
-            info!("updating new base price to {}", new_base_price);
-            let _ = kv::set(base_price_key(&pool_ident).as_str(), &new_base_price)?;
-        }
+    let new_base_price: f64 = f64::max(base_price, pool_price * (1. - config.trail_percent));
+    if new_base_price != base_price {
+        info!("updating new base price to {}", new_base_price);
+        let _ = kv::set(base_price_key(&pool_ident).as_str(), &new_base_price)?;
     }
 
     Ok(Ack)
 }
 
-fn trigger_sell(config: &StrategyConfig, tx: &Tx, strategy: &ManagedOrder) -> WorkerResult<Ack> {
-    let now = config.network.to_unix_time(tx.block_slot);
+fn trigger_sell(
+    config: &StrategyConfig,
+    now: u64,
+    strategy: &ManagedOrder,
+) -> WorkerResult<Ack> {
     let valid_for = Duration::from_secs_f64(20. * 60.);
     let validity_range = Interval::inclusive_range(
         now - valid_for.as_millis() as u64,
@@ -95,6 +86,6 @@ fn main() -> Worker {
     balius_sdk::logging::init();
 
     Strategy::<StrategyConfig>::new()
-        .on_each_tx(on_each_tx)
+        .on_new_pool_state(on_new_pool_state)
         .worker()
 }

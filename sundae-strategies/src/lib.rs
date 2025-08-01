@@ -56,9 +56,9 @@ pub struct PoolState {
     pub pool_datum: PoolDatum,
 }
 
-pub type NewStrategyCallback<T> = Option<fn(Config<T>, ManagedOrder) -> WorkerResult<Ack>>;
-pub type NewPoolStateCallback<T> = Option<fn(Config<T>, PoolState) -> WorkerResult<Ack>>;
-pub type EachTxCallback<T> = Option<fn(Config<T>, Tx, Vec<ManagedOrder>) -> WorkerResult<Ack>>;
+pub type NewStrategyCallback<T> = Option<fn(&Config<T>, &ManagedOrder) -> WorkerResult<Ack>>;
+pub type NewPoolStateCallback<T> = Option<fn(&Config<T>, &PoolState, &Vec<ManagedOrder>) -> WorkerResult<Ack>>;
+pub type EachTxCallback<T> = Option<fn(&Config<T>, &Tx, &Vec<ManagedOrder>) -> WorkerResult<Ack>>;
 
 pub struct Strategy<T> {
     new_strategy_callback: NewStrategyCallback<T>,
@@ -89,21 +89,21 @@ where
 
     pub fn on_new_order(
         mut self,
-        f: fn(Config<T>, ManagedOrder) -> WorkerResult<Ack>,
+        f: fn(&Config<T>, &ManagedOrder) -> WorkerResult<Ack>,
     ) -> Self {
         self.new_strategy_callback = Some(f);
         self
     }
     pub fn on_new_pool_state(
         mut self,
-        f: fn(Config<T>, PoolState) -> WorkerResult<Ack>,
+        f: fn(&Config<T>, &PoolState, &Vec<ManagedOrder>) -> WorkerResult<Ack>,
     ) -> Self {
         self.new_pool_state_callback = Some(f);
         self
     }
     pub fn on_each_tx(
         mut self,
-        f: fn(Config<T>, Tx, Vec<ManagedOrder>) -> WorkerResult<Ack>,
+        f: fn(&Config<T>, &Tx, &Vec<ManagedOrder>) -> WorkerResult<Ack>,
     ) -> Self {
         self.each_tx_callback = Some(f);
         self
@@ -146,13 +146,7 @@ where
 }
 
 impl<T: Send + Sync + 'static> Strategy<T> {
-    fn handle_utxo(&self, config: Config<T>, utxo: Utxo<()>) -> WorkerResult<Ack> {
-        trace!(
-            slot = utxo.block_slot,
-            tx_ref = format!("{}#{}", hex::encode(&utxo.tx_hash), utxo.index),
-            "transaction output observed",
-        );
-
+    fn handle_strategy_order(&self, config: &Config<T>, utxo: &Utxo<()>) -> WorkerResult<Ack> {
         // Check if it's a sundae v3 order datum?
         let Some(datum) = utxo
             .utxo
@@ -160,11 +154,6 @@ impl<T: Send + Sync + 'static> Strategy<T> {
             .clone()
             .and_then(|d| types::try_parse::<OrderDatum>(&d.original_cbor))
         else {
-            trace!(
-                slot = utxo.block_slot,
-                tx_ref = format!("{}#{}", hex::encode(&utxo.tx_hash), utxo.index),
-                "transaction output not a sundae v3 order",
-            );
             return Ok(Ack);
         };
 
@@ -193,7 +182,6 @@ impl<T: Send + Sync + 'static> Strategy<T> {
                 }
             }
             _ => {
-                info!("transaction output is not a strategy order");
                 return Ok(Ack)
             },
         }
@@ -201,14 +189,14 @@ impl<T: Send + Sync + 'static> Strategy<T> {
         info!(
             slot = utxo.block_slot,
             tx_ref = format!("{}#{}", hex::encode(&utxo.tx_hash), utxo.index),
-            "strategy order observed",
+            "owned strategy order observed",
         );
 
         // Save this order in our key-value store
         let seen = ManagedOrder {
             slot: utxo.block_slot,
             output: OutputReference {
-                transaction_id: TransactionId(utxo.tx_hash),
+                transaction_id: TransactionId(utxo.tx_hash.clone()),
                 output_index: utxo.index,
             },
             utxo: utxo.utxo.clone(),
@@ -224,10 +212,57 @@ impl<T: Send + Sync + 'static> Strategy<T> {
         info!("now tracking {} orders", all_seen.len());
 
         if let Some(callback) = self.new_strategy_callback {
-            callback(config, seen)
+            callback(config, &seen)
         } else {
             Ok(Ack)
         }
+    }
+    fn handle_pool_state(&self, config: &Config<T>, utxo: &Utxo<()>) -> WorkerResult<Ack> {
+        // Check if it's a sundae v3 order datum?
+        let Some(datum) = utxo
+            .utxo
+            .datum
+            .clone()
+            .and_then(|d| types::try_parse::<PoolDatum>(&d.original_cbor))
+        else {
+            return Ok(Ack);
+        };
+
+        trace!(
+            slot = utxo.block_slot,
+            tx_ref = format!("{}#{}", hex::encode(&utxo.tx_hash), utxo.index),
+            "transaction output is a new sundae v3 pool state",
+        );
+
+        let pool_state = PoolState {
+            slot: utxo.block_slot,
+            output: OutputReference {
+                transaction_id: TransactionId(utxo.tx_hash.clone()),
+                output_index: utxo.index,
+            },
+            utxo: utxo.utxo.clone(),
+            pool_datum: datum,
+        };
+
+        let all_seen: Vec<ManagedOrder> = kv::get(KV_MANAGED_ORDERS)?.unwrap_or_default();
+
+        if let Some(callback) = self.new_pool_state_callback {
+            callback(config, &pool_state, &all_seen)
+        } else {
+            Ok(Ack)
+        }
+    }
+
+    fn handle_utxo(&self, config: Config<T>, utxo: Utxo<()>) -> WorkerResult<Ack> {
+        trace!(
+            slot = utxo.block_slot,
+            tx_ref = format!("{}#{}", hex::encode(&utxo.tx_hash), utxo.index),
+            "transaction output observed",
+        );
+
+        self.handle_pool_state(&config, &utxo)?;
+        self.handle_strategy_order(&config, &utxo)?;
+        Ok(Ack)
     }
 
     fn handle_tx(
@@ -264,7 +299,7 @@ impl<T: Send + Sync + 'static> Strategy<T> {
         trace!("remaining orders: {:?}", seen_orders);
 
         if let Some(callback) = self.each_tx_callback {
-            callback(config, tx, seen_orders)
+            callback(&config, &tx, &seen_orders)
         } else {
             Ok(Ack)
         }
