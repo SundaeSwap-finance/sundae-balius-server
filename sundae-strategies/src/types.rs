@@ -55,10 +55,11 @@ impl From<(Vec<u8>, Vec<u8>)> for AssetId {
     }
 }
 
+pub type InlineAssetId = (Vec<u8>, Vec<u8>);
 #[derive(AsPlutus, Serialize, Deserialize, Debug, Clone)]
 pub struct PoolDatum {
     pub identifier: Vec<u8>,
-    pub assets: ((Vec<u8>, Vec<u8>), (Vec<u8>, Vec<u8>)),
+    pub assets: (InlineAssetId, InlineAssetId),
     pub circulating_lp: BigInt,
     pub bid_fees_per_10_thousand: BigInt,
     pub ask_fees_per_10_thousand: BigInt,
@@ -247,8 +248,8 @@ pub enum ParseError {
 }
 
 pub fn parse<T: AsPlutus>(bytes: &[u8]) -> Result<T, ParseError> {
-    let data = minicbor::decode(bytes).map_err(|e| ParseError::Decode(e))?;
-    T::from_plutus(data).map_err(|e| ParseError::Parse(e))
+    let data = minicbor::decode(bytes).map_err(ParseError::Decode)?;
+    T::from_plutus(data).map_err(ParseError::Parse)
 }
 
 pub fn try_parse<T: AsPlutus>(bytes: &[u8]) -> Option<T> {

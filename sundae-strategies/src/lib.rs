@@ -65,7 +65,7 @@ pub type NewStrategyCallback<T> = fn(&Config<T>, &ManagedStrategy) -> WorkerResu
 struct NewStrategyHandler<T>(Option<NewStrategyCallback<T>>);
 impl<T> Clone for NewStrategyHandler<T> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        Self(self.0)
     }
 }
 
@@ -74,7 +74,7 @@ pub type NewPoolStateCallback<T> =
 struct NewPoolStateHandler<T>(Option<NewPoolStateCallback<T>>);
 impl<T> Clone for NewPoolStateHandler<T> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        Self(self.0)
     }
 }
 
@@ -82,7 +82,7 @@ pub type EachTxCallback<T> = fn(&Config<T>, &Tx, &Vec<ManagedStrategy>) -> Worke
 struct EachTxHandler<T>(Option<EachTxCallback<T>>);
 impl<T> Clone for EachTxHandler<T> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        Self(self.0)
     }
 }
 
