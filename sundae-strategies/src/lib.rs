@@ -21,6 +21,7 @@ use crate::{
     },
 };
 
+/// Which network is this strategy running against?
 #[derive(Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Network {
@@ -29,6 +30,7 @@ pub enum Network {
 }
 
 impl Network {
+    /// Get the UNIX time associated with a slot
     pub fn to_unix_time(&self, slot: u64) -> u64 {
         let offset = match self {
             Self::Preview => 1666656000,
@@ -37,7 +39,7 @@ impl Network {
         (slot + offset) * 1000
     }
 
-    pub fn relay_url(&self) -> Url {
+    pub(crate) fn relay_url(&self) -> Url {
         let url = match self {
             Self::Preview => "http://sse-relay.preview.sundae.fi/publish",
             Self::Mainnet => "http://sse-relay.sundae.fi/publish",
@@ -46,18 +48,29 @@ impl Network {
     }
 }
 
+/// Information about a strategy order getting managed by this library.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ManagedStrategy {
+    /// The slot in which we first saw the order.
     pub slot: u64,
+    /// A reference to the UTXO which is holding the order.
     pub output: OutputReference,
+    /// Contents of the UTXO which is holding the order.
     pub utxo: TxOutput,
+    /// The parsed order.
     pub order: OrderDatum,
 }
 
+/// Information about a Sundae pool
+#[derive(Debug, Clone)]
 pub struct PoolState {
+    /// The slot in which we first saw the pool.
     pub slot: u64,
+    /// A reference to the UTXO which is holding the pool.
     pub output: OutputReference,
+    /// Contents of the UTXO which is holding the pool.
     pub utxo: TxOutput,
+    /// The parsed pool datum.
     pub pool_datum: PoolDatum,
 }
 
@@ -86,6 +99,7 @@ impl<T> Clone for EachTxHandler<T> {
     }
 }
 
+/// The entry point to a Sundae strategy worker. Use this to register handlers for interesting events.
 pub struct Strategy<T> {
     new_strategy_callback: NewStrategyHandler<T>,
     new_pool_state_callback: NewPoolStateHandler<T>,
@@ -113,19 +127,23 @@ where
         }
     }
 
+    /// Register a callback to run when a new strategy is seen.
     pub fn on_new_strategy(mut self, f: NewStrategyCallback<T>) -> Self {
         self.new_strategy_callback = NewStrategyHandler(Some(f));
         self
     }
+    /// Register a callback to run when a Sundae pool has been updated.
     pub fn on_new_pool_state(mut self, f: NewPoolStateCallback<T>) -> Self {
         self.new_pool_state_callback = NewPoolStateHandler(Some(f));
         self
     }
+    /// Register a callback to run for every transaction.
     pub fn on_each_tx(mut self, f: EachTxCallback<T>) -> Self {
         self.each_tx_callback = EachTxHandler(Some(f));
         self
     }
 
+    /// Finish building this strategy handler and construct a Balius worker.
     pub fn worker(self) -> Worker {
         Worker::new()
             .with_request_handler("get-signer-key", self.clone())
@@ -330,9 +348,50 @@ impl<T: Send + Sync + 'static> Strategy<T> {
     }
 }
 
-pub const KV_MANAGED_ORDERS: &str = "managed_orders";
-pub const STRATEGY_KEY: &str = "default";
+pub(crate) const KV_MANAGED_ORDERS: &str = "managed_orders";
+pub(crate) const STRATEGY_KEY: &str = "default";
 
+/// Submit a strategy execution.
+///
+/// # Examples
+/// ```
+/// # use std::time::Duration;
+/// # use sundae_strategies::{*, types::*};
+/// # use balius_sdk::*;
+/// #
+/// # struct MyConfig {
+/// #     network: Network,
+/// #     offer_token: AssetId,
+/// #     offer_amount: u64,
+/// #     receive_token: AssetId,
+/// #     receive_amount_min: u64,
+/// # }
+/// #
+/// fn trigger_buy(config: &MyConfig, now: u64, order: &ManagedStrategy) -> WorkerResult<()> {
+///     let valid_for = Duration::from_secs_f64(20. * 60.);
+///     let validity_range = Interval::inclusive_range(
+///         now - valid_for.as_millis() as u64,
+///         now + valid_for.as_millis() as u64,
+///     );
+///
+///     let swap = Order::Swap {
+///         offer: (
+///             config.offer_token.policy_id.clone(),
+///             config.offer_token.asset_name.clone(),
+///             config.offer_amount,
+///         ),
+///         min_received: (
+///             config.receive_token.policy_id.clone(),
+///             config.receive_token.asset_name.clone(),
+///             config.receive_amount_min,
+///         ),
+///     };
+///
+///     sundae_strategies::submit_execution(&config.network, &order.output, validity_range, swap)?;
+///
+///     Ok(())
+/// }
+/// ```
 pub fn submit_execution(
     network: &Network,
     utxo: &OutputReference,
