@@ -10,9 +10,9 @@ use sundae_strategies::{
 };
 use tracing::info;
 
-pub const BASE_PRICE_PREFIX: &'static str = "base_price:";
+pub const BASE_PRICE_PREFIX: &str = "base_price:";
 fn base_price_key(pool_ident: &String) -> String {
-    format!("{}{}", BASE_PRICE_PREFIX, pool_ident)
+    format!("{BASE_PRICE_PREFIX}{pool_ident}")
 }
 
 fn on_new_pool_state(
@@ -36,18 +36,18 @@ fn on_new_pool_state(
             pool_price, base_price,
         );
         for strategy in strategies {
-            return trigger_sell(
-                &config,
+            trigger_sell(
+                config,
                 config.network.to_unix_time(pool_state.slot),
-                &strategy,
-            );
+                strategy,
+            )?;
         }
     }
 
     let new_base_price: f64 = f64::max(base_price, pool_price * (1. - config.trail_percent));
     if new_base_price != base_price {
         info!("updating new base price to {}", new_base_price);
-        let _ = kv::set(base_price_key(&pool_ident).as_str(), &new_base_price)?;
+        kv::set(base_price_key(&pool_ident).as_str(), &new_base_price)?;
     }
 
     Ok(Ack)

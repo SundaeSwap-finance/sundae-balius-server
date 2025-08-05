@@ -21,7 +21,7 @@ fn on_each_tx(
         let slots_elapsed = tx.block_slot - seen.slot;
         if slots_elapsed > config.interval {
             info!("{} slots elapsed, triggering a buy order", slots_elapsed);
-            trigger_buy(&config, config.network.to_unix_time(tx.block_slot), &seen)?;
+            trigger_buy(config, config.network.to_unix_time(tx.block_slot), seen)?;
         } else {
             info!(
                 "{} slots elapsed, out of {}; {} slots remaining before we trigger a buy...",
