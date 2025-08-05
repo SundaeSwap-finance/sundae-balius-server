@@ -53,7 +53,11 @@ fn on_new_pool_state(
     Ok(Ack)
 }
 
-fn trigger_sell(config: &StrategyConfig, now: u64, strategy: &ManagedStrategy) -> WorkerResult<Ack> {
+fn trigger_sell(
+    config: &StrategyConfig,
+    now: u64,
+    strategy: &ManagedStrategy,
+) -> WorkerResult<Ack> {
     let valid_for = Duration::from_secs_f64(20. * 60.);
     let validity_range = Interval::inclusive_range(
         now - valid_for.as_millis() as u64,
