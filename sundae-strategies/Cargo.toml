@@ -7,7 +7,7 @@ license = "Apache-2.0"
 repository = "https://github.com/SundaeSwap-finance/sundae-balius-server/"
 
 [dependencies]
-balius-sdk = { git = "https://github.com/txpipe/balius.git", version = "0.4" }
+balius-sdk = { workspace = true }
 hex = "0.4"
 plutus-parser = { version = "0.1", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }

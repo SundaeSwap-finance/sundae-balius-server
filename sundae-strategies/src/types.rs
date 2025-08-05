@@ -3,10 +3,17 @@ use std::fmt::{self, Debug};
 use balius_sdk::txbuilder::{codec::minicbor, plutus::BigInt};
 use plutus_parser::AsPlutus;
 use serde::{Deserialize, Serialize, de};
+use utxorpc_spec::utxorpc::v1alpha::cardano::TxOutput;
 
+#[derive(PartialEq)]
 pub struct AssetId {
     pub policy_id: Vec<u8>,
     pub asset_name: Vec<u8>,
+}
+impl AssetId {
+    pub fn is_ada(&self) -> bool {
+        self.policy_id.is_empty() && self.asset_name.is_empty()
+    }
 }
 
 struct AssetIdVisitor;
@@ -39,16 +46,83 @@ impl<'de> Deserialize<'de> for AssetId {
     }
 }
 
+impl From<(Vec<u8>, Vec<u8>)> for AssetId {
+    fn from(value: (Vec<u8>, Vec<u8>)) -> Self {
+        AssetId {
+            policy_id: value.0,
+            asset_name: value.1,
+        }
+    }
+}
+
+pub type InlineAssetId = (Vec<u8>, Vec<u8>);
 #[derive(AsPlutus, Serialize, Deserialize, Debug, Clone)]
 pub struct PoolDatum {
     pub identifier: Vec<u8>,
-    pub assets: (Vec<u8>, Vec<u8>),
+    pub assets: (InlineAssetId, InlineAssetId),
     pub circulating_lp: BigInt,
     pub bid_fees_per_10_thousand: BigInt,
     pub ask_fees_per_10_thousand: BigInt,
     pub fee_manager: Option<MultisigScript>,
     pub market_open: BigInt,
     pub protocol_fees: BigInt,
+}
+
+fn to_u64(big_int: &BigInt) -> Option<u64> {
+    match big_int {
+        BigInt::Int(int) => u64::try_from(int.0).ok(),
+        BigInt::BigUInt(_) | BigInt::BigNInt(_) => None,
+    }
+}
+
+pub fn asset_amount(output: &TxOutput, find_asset: &AssetId) -> u64 {
+    if find_asset.is_ada() {
+        output.coin
+    } else {
+        output
+            .assets
+            .iter()
+            .filter_map(|multiasset| {
+                let policy_id = multiasset.policy_id.to_vec();
+                multiasset
+                    .assets
+                    .iter()
+                    .filter_map(|asset| {
+                        let asset_name = asset.name.to_vec();
+                        if policy_id == find_asset.policy_id && asset_name == find_asset.asset_name
+                        {
+                            Some(asset.output_coin)
+                        } else {
+                            None
+                        }
+                    })
+                    .next()
+            })
+            .next()
+            .unwrap_or(0u64)
+    }
+}
+
+impl PoolDatum {
+    /// The raw price of the assets in the pool; not that this doesn't account for decimal places: for example,
+    /// for an ADA/SUNDAE pair, this will give the lovelace per sprinkles
+    /// If the decimal places on the token are the same, this will work out to the same value, but if they
+    /// have different decimal places, this could be non-intuitive
+    pub fn raw_price(&self, output: &TxOutput) -> f64 {
+        let asset_a: AssetId = self.assets.0.clone().into();
+        let asset_b: AssetId = self.assets.1.clone().into();
+
+        let reserves_a = if asset_a.is_ada() {
+            output.coin
+                - to_u64(&self.protocol_fees)
+                    .expect("the pool protocol fees should never exceed u64 max")
+        } else {
+            asset_amount(output, &asset_a)
+        };
+        let reserves_b = asset_amount(output, &asset_b);
+
+        (reserves_a as f64) / (reserves_b as f64)
+    }
 }
 
 #[derive(AsPlutus, Serialize, Deserialize, Debug, Clone)]
@@ -165,6 +239,17 @@ pub enum IntervalBoundType {
     NegativeInfinity,
     Finite(u64),
     PositiveInfinity,
+}
+
+#[derive(Debug)]
+pub enum ParseError {
+    Decode(minicbor::decode::Error),
+    Parse(plutus_parser::DecodeError),
+}
+
+pub fn parse<T: AsPlutus>(bytes: &[u8]) -> Result<T, ParseError> {
+    let data = minicbor::decode(bytes).map_err(ParseError::Decode)?;
+    T::from_plutus(data).map_err(ParseError::Parse)
 }
 
 pub fn try_parse<T: AsPlutus>(bytes: &[u8]) -> Option<T> {

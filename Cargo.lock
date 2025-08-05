@@ -282,7 +282,7 @@ dependencies = [
 [[package]]
 name = "balius-macros"
 version = "0.4.0"
-source = "git+https://github.com/txpipe/balius.git#f032823b60305d4ab074b6a2727c80d324ba0ec1"
+source = "git+https://github.com/txpipe/balius.git#3a8834fb43a657215ce467c89e4884651a8b4dab"
 dependencies = [
  "quote",
  "syn",
@@ -321,7 +321,7 @@ dependencies = [
 [[package]]
 name = "balius-sdk"
 version = "0.4.0"
-source = "git+https://github.com/txpipe/balius.git#f032823b60305d4ab074b6a2727c80d324ba0ec1"
+source = "git+https://github.com/txpipe/balius.git#3a8834fb43a657215ce467c89e4884651a8b4dab"
 dependencies = [
  "balius-macros",
  "hex",
@@ -940,7 +940,7 @@ version = "0.1.0"
 dependencies = [
  "balius-sdk",
  "hex",
- "plutus-parser",
+ "plutus-parser 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "serde_json",
  "sundae-strategies",
@@ -2547,7 +2547,18 @@ checksum = "5c91c35ed696191fddf770ed73605614336cfa1458c21efae905aed0783c806e"
 dependencies = [
  "indexmap 2.10.0",
  "pallas-primitives",
- "plutus-parser-derive",
+ "plutus-parser-derive 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "plutus-parser"
+version = "0.1.0"
+source = "git+https://github.com/SundaeSwap-finance/plutus-parser?rev=8a77d17#8a77d17e60031b4c5aa8fefc0ec621db23f2893f"
+dependencies = [
+ "indexmap 2.10.0",
+ "pallas-primitives",
+ "plutus-parser-derive 0.1.0 (git+https://github.com/SundaeSwap-finance/plutus-parser?rev=8a77d17)",
  "thiserror 2.0.12",
 ]
 
@@ -2556,6 +2567,16 @@ name = "plutus-parser-derive"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eb90dc0af619a3872f56e62da683792c43ccb940f55f76ed0f84b7e666bf813a"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "plutus-parser-derive"
+version = "0.1.0"
+source = "git+https://github.com/SundaeSwap-finance/plutus-parser?rev=8a77d17#8a77d17e60031b4c5aa8fefc0ec621db23f2893f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3447,7 +3468,7 @@ version = "0.1.0"
 dependencies = [
  "balius-sdk",
  "hex",
- "plutus-parser",
+ "plutus-parser 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "serde_json",
  "tracing",
@@ -3935,6 +3956,21 @@ dependencies = [
  "thread_local",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "trailing-stop-loss"
+version = "0.1.0"
+dependencies = [
+ "balius-sdk",
+ "hex",
+ "plutus-parser 0.1.0 (git+https://github.com/SundaeSwap-finance/plutus-parser?rev=8a77d17)",
+ "serde",
+ "serde_json",
+ "sundae-strategies",
+ "tracing",
+ "url",
+ "utxorpc-spec 0.16.0",
 ]
 
 [[package]]
