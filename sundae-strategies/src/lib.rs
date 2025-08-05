@@ -2,18 +2,23 @@ pub mod keys;
 pub mod kv;
 pub mod types;
 
-use url::Url;
 use balius_sdk::{
-    Ack, Config, Error, Tx, Utxo, UtxoMatcher, Worker, WorkerResult, _internal::Handler, http::{HttpRequest, HttpResponse}, wit,
+    _internal::Handler,
+    Ack, Config, Error, Tx, Utxo, UtxoMatcher, Worker, WorkerResult,
+    http::{HttpRequest, HttpResponse},
+    wit,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{info, trace};
+use url::Url;
 use utxorpc_spec::utxorpc::v1alpha::cardano::TxOutput;
 
 use crate::{
-    keys::get_signer_key, types::{
-        serialize, Interval, Order, OrderDatum, OutputReference, PoolDatum, SignedStrategyExecution, StrategyAuthorization, StrategyExecution, SubmitSSE, TransactionId
-    }
+    keys::get_signer_key,
+    types::{
+        Interval, Order, OrderDatum, OutputReference, PoolDatum, SignedStrategyExecution,
+        StrategyAuthorization, StrategyExecution, SubmitSSE, TransactionId, serialize,
+    },
 };
 
 #[derive(Deserialize)]
@@ -42,7 +47,7 @@ impl Network {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ManagedOrder {
+pub struct ManagedStrategy {
     pub slot: u64,
     pub output: OutputReference,
     pub utxo: TxOutput,
@@ -56,14 +61,35 @@ pub struct PoolState {
     pub pool_datum: PoolDatum,
 }
 
-pub type NewStrategyCallback<T> = Option<fn(&Config<T>, &ManagedOrder) -> WorkerResult<Ack>>;
-pub type NewPoolStateCallback<T> = Option<fn(&Config<T>, &PoolState, &Vec<ManagedOrder>) -> WorkerResult<Ack>>;
-pub type EachTxCallback<T> = Option<fn(&Config<T>, &Tx, &Vec<ManagedOrder>) -> WorkerResult<Ack>>;
+pub type NewStrategyCallback<T> = fn(&Config<T>, &ManagedStrategy) -> WorkerResult<Ack>;
+struct NewStrategyHandler<T>(Option<NewStrategyCallback<T>>);
+impl<T> Clone for NewStrategyHandler<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+pub type NewPoolStateCallback<T> =
+    fn(&Config<T>, &PoolState, &Vec<ManagedStrategy>) -> WorkerResult<Ack>;
+struct NewPoolStateHandler<T>(Option<NewPoolStateCallback<T>>);
+impl<T> Clone for NewPoolStateHandler<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+pub type EachTxCallback<T> = fn(&Config<T>, &Tx, &Vec<ManagedStrategy>) -> WorkerResult<Ack>;
+struct EachTxHandler<T>(Option<EachTxCallback<T>>);
+impl<T> Clone for EachTxHandler<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
 
 pub struct Strategy<T> {
-    new_strategy_callback: NewStrategyCallback<T>,
-    new_pool_state_callback: NewPoolStateCallback<T>,
-    each_tx_callback: EachTxCallback<T>,
+    new_strategy_callback: NewStrategyHandler<T>,
+    new_pool_state_callback: NewPoolStateHandler<T>,
+    each_tx_callback: EachTxHandler<T>,
 }
 impl<T> Clone for Strategy<T> {
     fn clone(&self) -> Self {
@@ -81,34 +107,24 @@ where
 {
     pub fn new() -> Self {
         Strategy {
-            new_strategy_callback: None,
-            new_pool_state_callback: None,
-            each_tx_callback: None,
+            new_strategy_callback: NewStrategyHandler(None),
+            new_pool_state_callback: NewPoolStateHandler(None),
+            each_tx_callback: EachTxHandler(None),
         }
     }
 
-    pub fn on_new_order(
-        mut self,
-        f: fn(&Config<T>, &ManagedOrder) -> WorkerResult<Ack>,
-    ) -> Self {
-        self.new_strategy_callback = Some(f);
+    pub fn on_new_strategy(mut self, f: NewStrategyCallback<T>) -> Self {
+        self.new_strategy_callback = NewStrategyHandler(Some(f));
         self
     }
-    pub fn on_new_pool_state(
-        mut self,
-        f: fn(&Config<T>, &PoolState, &Vec<ManagedOrder>) -> WorkerResult<Ack>,
-    ) -> Self {
-        self.new_pool_state_callback = Some(f);
+    pub fn on_new_pool_state(mut self, f: NewPoolStateCallback<T>) -> Self {
+        self.new_pool_state_callback = NewPoolStateHandler(Some(f));
         self
     }
-    pub fn on_each_tx(
-        mut self,
-        f: fn(&Config<T>, &Tx, &Vec<ManagedOrder>) -> WorkerResult<Ack>,
-    ) -> Self {
-        self.each_tx_callback = Some(f);
+    pub fn on_each_tx(mut self, f: EachTxCallback<T>) -> Self {
+        self.each_tx_callback = EachTxHandler(Some(f));
         self
     }
-
 
     pub fn worker(self) -> Worker {
         Worker::new()
@@ -116,6 +132,15 @@ where
             .with_utxo_handler(UtxoMatcher::all(), self.clone())
             .with_tx_handler(UtxoMatcher::all(), self.clone())
             .with_signer(STRATEGY_KEY, "ed25519")
+    }
+}
+
+impl<T: Send + Sync + 'static> Default for Strategy<T>
+where
+    Config<T>: TryFrom<Vec<u8>, Error = balius_sdk::Error>,
+{
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -168,22 +193,26 @@ impl<T: Send + Sync + 'static> Strategy<T> {
         };
 
         // Check if it's *our* order
-        use Order::Strategy;
         use StrategyAuthorization::Signature;
         match &datum.details {
-            Strategy {
+            Order::Strategy {
                 auth: Signature { signer },
             } => {
                 if signer == &key {
-                    info!("transaction output is a strategy order owned by us ({})", hex::encode(signer));
+                    info!(
+                        "transaction output is a strategy order owned by us ({})",
+                        hex::encode(signer)
+                    );
                 } else {
-                    info!("transaction output is a strategy order not owned by ({}), not us ({})", hex::encode(signer), hex::encode(&key));
+                    info!(
+                        "transaction output is a strategy order not owned by ({}), not us ({})",
+                        hex::encode(signer),
+                        hex::encode(&key)
+                    );
                     return Ok(Ack);
                 }
             }
-            _ => {
-                return Ok(Ack)
-            },
+            _ => return Ok(Ack),
         }
 
         info!(
@@ -193,7 +222,7 @@ impl<T: Send + Sync + 'static> Strategy<T> {
         );
 
         // Save this order in our key-value store
-        let seen = ManagedOrder {
+        let seen = ManagedStrategy {
             slot: utxo.block_slot,
             output: OutputReference {
                 transaction_id: TransactionId(utxo.tx_hash.clone()),
@@ -204,14 +233,14 @@ impl<T: Send + Sync + 'static> Strategy<T> {
         };
 
         // This is an order "under our custody", so we hold onto it
-        let mut all_seen: Vec<ManagedOrder> =
-            kv::get(KV_MANAGED_ORDERS)?.unwrap_or_default();
+        let mut all_seen: Vec<ManagedStrategy> = kv::get(KV_MANAGED_ORDERS)?.unwrap_or_default();
+
         all_seen.push(seen.clone());
         kv::set(KV_MANAGED_ORDERS, &all_seen)?;
 
         info!("now tracking {} orders", all_seen.len());
 
-        if let Some(callback) = self.new_strategy_callback {
+        if let NewStrategyHandler(Some(callback)) = self.new_strategy_callback {
             callback(config, &seen)
         } else {
             Ok(Ack)
@@ -244,9 +273,9 @@ impl<T: Send + Sync + 'static> Strategy<T> {
             pool_datum: datum,
         };
 
-        let all_seen: Vec<ManagedOrder> = kv::get(KV_MANAGED_ORDERS)?.unwrap_or_default();
+        let all_seen: Vec<ManagedStrategy> = kv::get(KV_MANAGED_ORDERS)?.unwrap_or_default();
 
-        if let Some(callback) = self.new_pool_state_callback {
+        if let NewPoolStateHandler(Some(callback)) = self.new_pool_state_callback {
             callback(config, &pool_state, &all_seen)
         } else {
             Ok(Ack)
@@ -265,11 +294,7 @@ impl<T: Send + Sync + 'static> Strategy<T> {
         Ok(Ack)
     }
 
-    fn handle_tx(
-        &self,
-        config: Config<T>,
-        tx: Tx,
-    ) -> WorkerResult<Ack> {
+    fn handle_tx(&self, config: Config<T>, tx: Tx) -> WorkerResult<Ack> {
         trace!(
             slot = tx.block_slot,
             tx_hash = hex::encode(&tx.hash),
@@ -283,8 +308,7 @@ impl<T: Send + Sync + 'static> Strategy<T> {
             .collect::<Vec<_>>();
 
         trace!("Marking orders as spent, if any...");
-        let mut seen_orders: Vec<ManagedOrder> =
-            kv::get(KV_MANAGED_ORDERS)?.unwrap_or_default();
+        let mut seen_orders: Vec<ManagedStrategy> = kv::get(KV_MANAGED_ORDERS)?.unwrap_or_default();
 
         seen_orders.retain(|spent| {
             let (spent_hash, spent_index) =
@@ -298,7 +322,7 @@ impl<T: Send + Sync + 'static> Strategy<T> {
 
         trace!("remaining orders: {:?}", seen_orders);
 
-        if let Some(callback) = self.each_tx_callback {
+        if let EachTxHandler(Some(callback)) = self.each_tx_callback {
             callback(&config, &tx, &seen_orders)
         } else {
             Ok(Ack)
@@ -306,8 +330,8 @@ impl<T: Send + Sync + 'static> Strategy<T> {
     }
 }
 
-pub const KV_MANAGED_ORDERS: &'static str = "managed_orders";
-pub const STRATEGY_KEY: &'static str = "default";
+pub const KV_MANAGED_ORDERS: &str = "managed_orders";
+pub const STRATEGY_KEY: &str = "default";
 
 pub fn submit_execution(
     network: &Network,

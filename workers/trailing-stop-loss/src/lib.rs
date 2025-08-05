@@ -5,7 +5,8 @@ use std::time::Duration;
 use balius_sdk::{Ack, Config, WorkerResult};
 use config::Config as StrategyConfig;
 use sundae_strategies::{
-    kv, types::{asset_amount, Interval, Order}, ManagedOrder, PoolState, Strategy
+    ManagedStrategy, PoolState, Strategy, kv,
+    types::{Interval, Order, asset_amount},
 };
 use tracing::info;
 
@@ -14,25 +15,20 @@ fn base_price_key(pool_ident: &String) -> String {
     format!("{}{}", BASE_PRICE_PREFIX, pool_ident)
 }
 
-// We need to:
-// - Find pool update transactions
-// - Determine token price
-// - Compare to base price
-// - if % increase >= step_percent, increase base price
-// - If price falls below that (by some margin?) sell
-
 fn on_new_pool_state(
     config: &Config<StrategyConfig>,
     pool_state: &PoolState,
-    strategies: &Vec<ManagedOrder>,
+    strategies: &Vec<ManagedStrategy>,
 ) -> WorkerResult<Ack> {
-
     let pool_price = pool_state.pool_datum.raw_price(&pool_state.utxo);
     let pool_ident = hex::encode(&pool_state.pool_datum.identifier);
 
     let base_price = kv::get::<f64>(base_price_key(&pool_ident).as_str())?.unwrap_or(0.0);
 
-    info!("pool update found, with price {} against base price {}", pool_price, base_price);
+    info!(
+        "pool update found, with price {} against base price {}",
+        pool_price, base_price
+    );
 
     if pool_price < base_price {
         info!(
@@ -40,7 +36,11 @@ fn on_new_pool_state(
             pool_price, base_price,
         );
         for strategy in strategies {
-            return trigger_sell(&config, config.network.to_unix_time(pool_state.slot), &strategy);
+            return trigger_sell(
+                &config,
+                config.network.to_unix_time(pool_state.slot),
+                &strategy,
+            );
         }
     }
 
@@ -53,11 +53,7 @@ fn on_new_pool_state(
     Ok(Ack)
 }
 
-fn trigger_sell(
-    config: &StrategyConfig,
-    now: u64,
-    strategy: &ManagedOrder,
-) -> WorkerResult<Ack> {
+fn trigger_sell(config: &StrategyConfig, now: u64, strategy: &ManagedStrategy) -> WorkerResult<Ack> {
     let valid_for = Duration::from_secs_f64(20. * 60.);
     let validity_range = Interval::inclusive_range(
         now - valid_for.as_millis() as u64,

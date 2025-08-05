@@ -48,7 +48,10 @@ impl<'de> Deserialize<'de> for AssetId {
 
 impl From<(Vec<u8>, Vec<u8>)> for AssetId {
     fn from(value: (Vec<u8>, Vec<u8>)) -> Self {
-        AssetId { policy_id: value.0, asset_name: value.1 }
+        AssetId {
+            policy_id: value.0,
+            asset_name: value.1,
+        }
     }
 }
 
@@ -75,23 +78,29 @@ pub fn asset_amount(output: &TxOutput, find_asset: &AssetId) -> u64 {
     if find_asset.is_ada() {
         output.coin
     } else {
-        output.assets.iter().filter_map(|multiasset| {
-            let policy_id = multiasset.policy_id.to_vec();
-            multiasset.assets.iter().filter_map(|asset| {
-                let asset_name = asset.name.to_vec();
-                if policy_id == find_asset.policy_id && asset_name == find_asset.asset_name {
-                    Some(asset.output_coin)
-                } else {
-                    None
-                }
+        output
+            .assets
+            .iter()
+            .filter_map(|multiasset| {
+                let policy_id = multiasset.policy_id.to_vec();
+                multiasset
+                    .assets
+                    .iter()
+                    .filter_map(|asset| {
+                        let asset_name = asset.name.to_vec();
+                        if policy_id == find_asset.policy_id && asset_name == find_asset.asset_name
+                        {
+                            Some(asset.output_coin)
+                        } else {
+                            None
+                        }
+                    })
+                    .next()
             })
             .next()
-        })
-        .next()
-        .unwrap_or(0u64)
+            .unwrap_or(0u64)
     }
 }
-
 
 impl PoolDatum {
     /// The raw price of the assets in the pool; not that this doesn't account for decimal places: for example,
@@ -103,7 +112,9 @@ impl PoolDatum {
         let asset_b: AssetId = self.assets.1.clone().into();
 
         let reserves_a = if asset_a.is_ada() {
-            output.coin - to_u64(&self.protocol_fees).expect("the pool protocol fees should never exceed u64 max")
+            output.coin
+                - to_u64(&self.protocol_fees)
+                    .expect("the pool protocol fees should never exceed u64 max")
         } else {
             asset_amount(output, &asset_a)
         };
