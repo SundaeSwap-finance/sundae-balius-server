@@ -9,4 +9,5 @@ members = [
 ]
 
 [workspace.dependencies]
-balius-sdk = { git = "https://github.com/txpipe/balius.git" }
+balius-runtime = { git = "https://github.com/txpipe/balius.git", version = "0.5" }
+balius-sdk = { git = "https://github.com/txpipe/balius.git", version = "0.5" }

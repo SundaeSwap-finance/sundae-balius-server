@@ -7,7 +7,7 @@ edition = "2024"
 anyhow = "1"
 async-trait = "0.1"
 axum = "0.8"
-balius-runtime = { git = "https://github.com/txpipe/balius.git", version = "0.4" }
+balius-runtime.workspace = true
 clap = { version = "4", features = ["derive"] }
 dashmap = "6"
 figment = { version = "0.10", features = ["yaml"] }

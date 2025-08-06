@@ -281,8 +281,8 @@ dependencies = [
 
 [[package]]
 name = "balius-macros"
-version = "0.4.0"
-source = "git+https://github.com/txpipe/balius.git#3a8834fb43a657215ce467c89e4884651a8b4dab"
+version = "0.5.1"
+source = "git+https://github.com/txpipe/balius.git#bb5143895c122ff6e95e0e8cef3208cea22d8775"
 dependencies = [
  "quote",
  "syn",
@@ -290,8 +290,8 @@ dependencies = [
 
 [[package]]
 name = "balius-runtime"
-version = "0.4.0"
-source = "git+https://github.com/txpipe/balius.git#f032823b60305d4ab074b6a2727c80d324ba0ec1"
+version = "0.5.1"
+source = "git+https://github.com/txpipe/balius.git#bb5143895c122ff6e95e0e8cef3208cea22d8775"
 dependencies = [
  "async-trait",
  "chrono",
@@ -320,8 +320,8 @@ dependencies = [
 
 [[package]]
 name = "balius-sdk"
-version = "0.4.0"
-source = "git+https://github.com/txpipe/balius.git#3a8834fb43a657215ce467c89e4884651a8b4dab"
+version = "0.5.1"
+source = "git+https://github.com/txpipe/balius.git#bb5143895c122ff6e95e0e8cef3208cea22d8775"
 dependencies = [
  "balius-macros",
  "hex",
@@ -1501,6 +1501,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower-service",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -3018,6 +3019,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -4742,6 +4744,15 @@ checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e8983c3ab33d6fb807cfcdad2491c4ea8cbc8ed839181c7dfd9c67c83e261b2"
+dependencies = [
+ "rustls-pki-types",
 ]
 
 [[package]]
