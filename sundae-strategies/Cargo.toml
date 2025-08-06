@@ -5,6 +5,7 @@ edition = "2024"
 description = "Helper library to develop Sundae strategies"
 license = "Apache-2.0"
 repository = "https://github.com/SundaeSwap-finance/sundae-balius-server/"
+readme = "../README.md"
 
 [dependencies]
 balius-sdk = { workspace = true }
