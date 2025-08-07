@@ -1368,7 +1368,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "212ab92002354b4819390025006c897e8140934349e8635c9b077f47b4dcbd20"
 
 [[package]]
-name = "hosky-trading-strategy"
+name = "hosky-always-lose"
 version = "0.1.0"
 dependencies = [
  "balius-sdk",
