@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1"
+cargo_metadata = "0.21"
 clap = { version = "4", features = ["derive"] }
 wat = "1"
 wit-component = "0.230"

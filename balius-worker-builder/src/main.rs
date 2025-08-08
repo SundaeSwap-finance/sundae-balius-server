@@ -4,16 +4,19 @@ use std::{
 };
 
 use anyhow::{Result, bail};
+use cargo_metadata::MetadataCommand;
 use clap::Parser;
 use wit_component::ComponentEncoder;
 
 fn compile(contract_path: &Path) -> Result<Vec<u8>> {
-    let Some(name) = contract_path.file_name() else {
-        bail!("couldn't find contract name");
+    let manifest_path = contract_path.join("Cargo.toml");
+    let metadata = MetadataCommand::new()
+        .manifest_path(&manifest_path)
+        .exec()?;
+    let Some(package) = metadata.root_package() else {
+        bail!("couldn't find root package");
     };
-    let Some(name) = name.to_str() else {
-        bail!("invalid contract name");
-    };
+    let name = package.name.to_string();
 
     println!("Compiling {name}...");
     Command::new("cargo")
@@ -21,12 +24,13 @@ fn compile(contract_path: &Path) -> Result<Vec<u8>> {
         .arg("--target")
         .arg("wasm32-unknown-unknown")
         .arg("--release")
-        .current_dir(contract_path)
+        .arg("--manifest-path")
+        .arg(&manifest_path)
         .exec()?;
 
     let filename = format!("{}.wasm", name.replace("-", "_"));
-    let path = std::env::current_dir()?
-        .join("target")
+    let path = metadata
+        .target_directory
         .join("wasm32-unknown-unknown")
         .join("release")
         .join(filename);
