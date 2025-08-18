@@ -1428,6 +1428,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "212ab92002354b4819390025006c897e8140934349e8635c9b077f47b4dcbd20"
 
 [[package]]
+name = "hosky-always-lose"
+version = "0.1.0"
+dependencies = [
+ "balius-sdk",
+ "hex",
+ "plutus-parser 0.1.0 (git+https://github.com/SundaeSwap-finance/plutus-parser?rev=8a77d17)",
+ "serde",
+ "serde_json",
+ "sundae-strategies",
+ "tracing",
+ "url",
+ "utxorpc-spec 0.16.0",
+]
+
+[[package]]
 name = "http"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
